@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Bridge\Symfony\DependencyInjection;
 
 use CronMonitor\Client\Configuration as ClientConfiguration;
+use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
@@ -13,7 +14,14 @@ final class Configuration implements ConfigurationInterface
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder('cron_monitor');
+        // `getRootNode()` is declared as `NodeDefinition` on Symfony's
+        // ConfigurationInterface but returns the array-shaped variant in
+        // practice (the root of every tree builder is an array node).
+        // The narrow assertion satisfies PHPStan on PHP 8.1 where the
+        // composer resolver pins an older Symfony version without the
+        // narrowed phpdoc return type.
         $rootNode = $treeBuilder->getRootNode();
+        \assert($rootNode instanceof ArrayNodeDefinition);
 
         $rootNode
             ->children()
