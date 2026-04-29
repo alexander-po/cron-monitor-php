@@ -1,0 +1,79 @@
+{
+    "name": "cron-monitor/php-sdk",
+    "description": "PHP SDK for cron-monitor.io with first-class Symfony Scheduler and Laravel Scheduler support.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "cron",
+        "monitoring",
+        "scheduler",
+        "symfony",
+        "laravel",
+        "healthcheck",
+        "deadman-switch"
+    ],
+    "homepage": "https://github.com/alexander-po/cron-monitor-php",
+    "require": {
+        "php": ">=8.1",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/log": "^2.0 || ^3.0",
+        "psr/clock": "^1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.11",
+        "friendsofphp/php-cs-fixer": "^3.50",
+        "guzzlehttp/guzzle": "^7.8",
+        "guzzlehttp/psr7": "^2.6",
+        "symfony/framework-bundle": "^6.4 || ^7.0",
+        "symfony/scheduler": "^6.4 || ^7.0",
+        "symfony/messenger": "^6.4 || ^7.0",
+        "symfony/console": "^6.4 || ^7.0",
+        "symfony/dependency-injection": "^6.4 || ^7.0",
+        "symfony/http-kernel": "^6.4 || ^7.0",
+        "illuminate/console": "^10.0 || ^11.0",
+        "illuminate/support": "^10.0 || ^11.0",
+        "illuminate/contracts": "^10.0 || ^11.0"
+    },
+    "suggest": {
+        "symfony/framework-bundle": "Required to use the Symfony bundle bridge (^6.4 || ^7.0).",
+        "symfony/scheduler": "Required to auto-register Symfony Scheduler runs as monitors.",
+        "illuminate/console": "Required to use the Laravel scheduler macros and sync command.",
+        "guzzlehttp/guzzle": "Recommended PSR-18 HTTP client. Any PSR-18 client works."
+    },
+    "autoload": {
+        "psr-4": {
+            "CronMonitor\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "CronMonitor\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/cron-monitor"
+    ],
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        },
+        "laravel": {
+            "providers": [
+                "CronMonitor\\Bridge\\Laravel\\CronMonitorServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse",
+        "cs": "php-cs-fixer fix",
+        "cs-check": "php-cs-fixer fix --dry-run --diff"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
