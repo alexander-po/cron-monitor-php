@@ -1,0 +1,24 @@
+parameters:
+    level: 8
+    paths:
+        - src
+        - tests
+    excludePaths:
+        # Symfony DI configurator scripts use the global `service()`,
+        # `tagged_iterator()`, etc. helpers that exist only after the DI
+        # closure binding is applied at compile time. PHPStan sees them as
+        # free-standing functions; analysing the file produces only false
+        # positives. The runtime contract is exercised by the Symfony
+        # functional tests in the host application instead.
+        - src/Bridge/Symfony/Resources/config/services.php
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # `app()` is a Laravel-side global helper available everywhere
+        # inside a booted Laravel application (defined in
+        # illuminate/foundation, which is not pulled in as a dev-dep —
+        # we only depend on the lighter illuminate/* facets we actually
+        # use). The macro that calls it runs only when Laravel is the
+        # host framework, so the helper is guaranteed to exist at runtime.
+        -
+            message: '#Function app not found#'
+            path: src/Bridge/Laravel/CronMonitorServiceProvider.php

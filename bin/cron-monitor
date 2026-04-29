@@ -1,0 +1,185 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * Standalone CLI entry-point for the cron-monitor SDK.
+ *
+ * Lets users call ping endpoints from a shell script without booting a
+ * Symfony or Laravel container — useful for systemd timers, plain cron
+ * jobs in Docker, and CI pipelines that want a heartbeat from a job step.
+ *
+ * Usage:
+ *   vendor/bin/cron-monitor heartbeat <uuid> [--endpoint=URL] [--api-key=KEY] [--body=TEXT]
+ *   vendor/bin/cron-monitor start     <uuid> [...]
+ *   vendor/bin/cron-monitor success   <uuid> [...]
+ *   vendor/bin/cron-monitor fail      <uuid> [...]
+ *
+ * Exit codes:
+ *   0 — ping delivered with 2xx
+ *   2 — ping failed at the network or HTTP layer (job continues; this is
+ *       intentional so a flaky cron-monitor backend never breaks the
+ *       wrapping shell pipeline)
+ *   64 — usage error (bad arguments, unknown command)
+ */
+
+exit((function (): int {
+    $autoloadCandidates = [
+        // Standalone vendored install: bin/ -> repo root -> vendor/autoload.php
+        __DIR__.'/../vendor/autoload.php',
+        // Installed as a Composer dep: bin/ lives in vendor/cron-monitor/php-sdk/bin
+        __DIR__.'/../../../autoload.php',
+    ];
+    foreach ($autoloadCandidates as $candidate) {
+        if (file_exists($candidate)) {
+            require $candidate;
+            break;
+        }
+    }
+    if (!class_exists(CronMonitor\Client\CronMonitorClient::class)) {
+        fwrite(\STDERR, "Could not locate the Composer autoloader. Install dependencies with `composer install`.\n");
+
+        return 64;
+    }
+
+    $argv = $_SERVER['argv'] ?? [];
+    array_shift($argv); // strip script name
+
+    if ([] === $argv || \in_array($argv[0], ['-h', '--help', 'help'], true)) {
+        printUsage();
+
+        return [] === $argv ? 64 : 0;
+    }
+
+    $command = (string) array_shift($argv);
+    if (!\in_array($command, ['heartbeat', 'start', 'success', 'fail'], true)) {
+        fwrite(\STDERR, \sprintf("Unknown command: %s\n", $command));
+        printUsage();
+
+        return 64;
+    }
+
+    $uuid = null;
+    $endpoint = getenv('CRON_MONITOR_ENDPOINT') ?: CronMonitor\Client\Configuration::DEFAULT_ENDPOINT;
+    $apiKey = getenv('CRON_MONITOR_API_KEY') ?: null;
+    $body = null;
+    $allowInsecure = false;
+
+    foreach ($argv as $arg) {
+        if (str_starts_with($arg, '--endpoint=')) {
+            $endpoint = substr($arg, 11);
+        } elseif (str_starts_with($arg, '--api-key=')) {
+            $apiKey = substr($arg, 10);
+        } elseif (str_starts_with($arg, '--body=')) {
+            $body = substr($arg, 7);
+        } elseif ('--allow-insecure' === $arg) {
+            $allowInsecure = true;
+        } elseif (!str_starts_with($arg, '--') && null === $uuid) {
+            $uuid = $arg;
+        } else {
+            fwrite(\STDERR, \sprintf("Unknown argument: %s\n", $arg));
+            printUsage();
+
+            return 64;
+        }
+    }
+
+    if (null === $uuid) {
+        fwrite(\STDERR, "Missing monitor UUID.\n");
+        printUsage();
+
+        return 64;
+    }
+
+    if (null === $body && 'fail' === $command) {
+        // For the `fail` shorthand, slurp stdin if it's piped — that's the
+        // canonical "pipe stderr to cron-monitor on failure" workflow.
+        $stdin = stream_get_contents(\STDIN);
+        if (\is_string($stdin) && '' !== $stdin) {
+            $body = $stdin;
+        }
+    }
+
+    try {
+        $config = new CronMonitor\Client\Configuration(
+            endpoint: $endpoint,
+            apiKey: $apiKey,
+            allowInsecureEndpoint: $allowInsecure,
+        );
+    } catch (InvalidArgumentException $e) {
+        fwrite(\STDERR, \sprintf("Configuration error: %s\n", $e->getMessage()));
+
+        return 64;
+    }
+
+    if (!class_exists(GuzzleHttp\Client::class)) {
+        fwrite(\STDERR, "guzzlehttp/guzzle is required for the standalone CLI. Install it with `composer require guzzlehttp/guzzle`.\n");
+
+        return 64;
+    }
+
+    $http = new GuzzleHttp\Client(['timeout' => $config->timeoutSeconds]);
+    $factory = new GuzzleHttp\Psr7\HttpFactory();
+    $client = new CronMonitor\Client\CronMonitorClient($config, $http, $factory, $factory);
+
+    $result = match ($command) {
+        'heartbeat' => $client->heartbeat($uuid, $body),
+        'start' => $client->start($uuid),
+        'success' => $client->success($uuid, $body),
+        'fail' => $client->fail($uuid, $body),
+        default => throw new LogicException('unreachable'),
+    };
+
+    if ($result->delivered) {
+        fwrite(\STDOUT, \sprintf("ok %s status=%d attempts=%d\n", $command, $result->statusCode, $result->attempts));
+
+        return 0;
+    }
+
+    fwrite(\STDERR, \sprintf(
+        "ping failed: %s status=%s attempts=%d\n",
+        $result->errorMessage,
+        $result->statusCode ?? 'n/a',
+        $result->attempts,
+    ));
+
+    return 2;
+})());
+
+function printUsage(): void
+{
+    fwrite(
+        \STDOUT,
+        <<<'TXT'
+            cron-monitor — ping client for scheduled jobs
+
+            USAGE
+              cron-monitor heartbeat <uuid> [--endpoint=URL] [--api-key=KEY] [--body=TEXT]
+              cron-monitor start     <uuid> [--endpoint=URL] [--api-key=KEY]
+              cron-monitor success   <uuid> [--endpoint=URL] [--api-key=KEY] [--body=TEXT]
+              cron-monitor fail      <uuid> [--endpoint=URL] [--api-key=KEY] [--body=TEXT]
+
+            ENVIRONMENT
+              CRON_MONITOR_ENDPOINT  default endpoint (default: https://cron-monitor.io)
+              CRON_MONITOR_API_KEY   default API key (optional)
+
+            EXAMPLES
+              # Heartbeat from a plain cron job:
+              * * * * * /opt/scripts/run.sh && cron-monitor heartbeat $UUID
+
+              # Wrap a job with start/success/fail and pipe stderr on failure:
+              cron-monitor start $UUID
+              if /opt/scripts/run.sh 2> /tmp/err; then
+                  cron-monitor success $UUID
+              else
+                  cron-monitor fail $UUID --body="$(cat /tmp/err)"
+              fi
+
+            EXIT CODES
+              0   ping delivered with 2xx
+              2   ping failed at network or HTTP layer
+              64  usage error
+            TXT
+    );
+}
