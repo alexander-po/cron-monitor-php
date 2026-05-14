@@ -6,6 +6,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [0.1.0] — 2026-05-14
+
+First public release on Packagist. Composer SDK for the cron-monitor
+service (cronheart.com), with framework-agnostic core plus Symfony bundle
+and Laravel service-provider bridges.
+
 ### Added
 
 - **Symfony Console subscriber.** Any `bin/console <name>` invocation whose
@@ -66,7 +74,3 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   pings include exception class, message, and `file:line` in the body
   — both of which can leak attacker-controlled input or host
   deployment layout. Includes redaction guidance.
-
-## [0.1.0] — 2026-04-29
-
-Initial Composer SDK with Symfony + Laravel bridges.
