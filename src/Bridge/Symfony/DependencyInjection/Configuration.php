@@ -50,11 +50,26 @@ final class Configuration implements ConfigurationInterface
                 ->end()
                 ->arrayNode('messages')
                     ->info('Map of FQCN => monitor UUID. Each Messenger handler that processes one of the listed messages will be wrapped in start/success/fail pings.')
+                    // Disable Symfony's default dash→underscore key
+                    // normalization. FQCNs never contain dashes today, but
+                    // PSR-4 namespaces with embedded numerics or future
+                    // composer naming changes could; keep the key byte-for-
+                    // byte equal to what the consumer wrote, since the
+                    // middleware compares it with `$message::class`.
+                    ->normalizeKeys(false)
                     ->useAttributeAsKey('class')
                     ->scalarPrototype()->end()
                 ->end()
                 ->arrayNode('commands')
-                    ->info('Map of console command name (e.g. "app:reports:nightly") => monitor UUID. Each invocation is wrapped in start/success/fail pings via a kernel event subscriber.')
+                    ->info('Map of console command name (e.g. "app:reports:nightly", "app:short-links:purge-disabled") => monitor UUID. Each invocation is wrapped in start/success/fail pings via a kernel event subscriber.')
+                    // Symfony console command names commonly contain
+                    // dashes (`app:short-links:purge-disabled`,
+                    // `cache:clear`-style colons are fine, dashes are not).
+                    // Without disabling key normalization the bundle silently
+                    // rewrites them to underscores at compile time and the
+                    // subscriber's `$commandMap[$commandName]` lookup never
+                    // matches — pings stop firing with no error or warning.
+                    ->normalizeKeys(false)
                     ->useAttributeAsKey('name')
                     ->scalarPrototype()->end()
                 ->end()

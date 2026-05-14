@@ -8,6 +8,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [0.1.2] — 2026-05-14
+
+### Fixed
+
+- **Command and message map keys containing hyphens are now preserved
+  byte-for-byte.** The bundle's `Configuration` tree used
+  `useAttributeAsKey()` without `normalizeKeys(false)`, so Symfony's
+  default dash→underscore normalization silently rewrote
+  `app:short-links:purge-disabled` to `app:short_links:purge_disabled`
+  at compile time. The kernel subscriber's `$commandMap[$commandName]`
+  lookup never matched the actual command name, and start/success/fail
+  pings stopped firing without any error or warning log line.
+  Surfaced when a host project (url-shortener) first wired in a real
+  Symfony command name (most third-party commands contain hyphens —
+  the README's `app:reports:nightly` example used colons only and
+  masked the bug). Both `commands:` and `messages:` array nodes now
+  disable key normalization, and a `ConfigurationTest` pins the
+  behaviour so the regression cannot recur silently.
+
 ## [0.1.1] — 2026-05-14
 
 ### Fixed
