@@ -90,6 +90,24 @@ It prints every `RecurringMessage` from every tagged
 `scheduler.schedule_provider`, plus a YAML snippet you can paste into the
 config above.
 
+### Plain `bin/console` commands
+
+If your cron entry is a console command rather than a Scheduler run — e.g.
+`* * * * * php bin/console app:reports:nightly` straight out of crontab —
+map the command name and the bundle wraps every invocation in
+start/success/fail pings via a kernel event subscriber:
+
+```yaml
+cron_monitor:
+    commands:
+        'app:reports:nightly': 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+```
+
+No code changes inside the command. A non-zero exit fires `fail`; an
+uncaught throwable fires `fail` with the exception class, message, and
+file:line in the body so the cron-monitor dashboard shows the immediate
+cause without you tailing logs.
+
 ## Laravel scheduler integration
 
 The service provider is auto-discovered. Publish the config:
@@ -113,6 +131,28 @@ you get start/success/fail pings on the same boundary as the job execution.
 
 `php artisan cron-monitor:sync` lists every scheduled command and emits a
 `config/cron-monitor.php` snippet.
+
+### Queued jobs
+
+For `ShouldQueue` jobs dispatched outside the scheduler, attach the bundled
+job middleware:
+
+```php
+use CronMonitor\Bridge\Laravel\Queue\MonitorQueueJob;
+
+class GenerateNightlyReport implements ShouldQueue
+{
+    public function middleware(): array
+    {
+        return [MonitorQueueJob::withUuid('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx')];
+    }
+}
+```
+
+Each invocation pings `start`, then `success` on completion or `fail` on a
+thrown exception (with the class, message, and file:line in the body). The
+underlying SDK swallows its own failures, so a flaky cron-monitor backend
+never breaks the queued job.
 
 ## Standalone CLI
 
@@ -154,6 +194,16 @@ to avoid repeating the flags.
   URL — no path traversal via the action segment.
 - The `Authorization: Bearer <api_key>` header is attached only when an
   API key is configured; nothing is sent for anonymous installs.
+- **`fail` pings include exception text and a host file path.** When a
+  monitored handler throws, the SDK sends the exception class name,
+  `getMessage()`, and `file:line` of the throw site to the cron-monitor
+  endpoint (capped at 10 KB). Exception messages routinely embed
+  attacker-controlled input (e.g. `PDOException` SQL fragments,
+  validation errors echoing user data); the file path discloses the host
+  deployment layout. If your threat model treats either as sensitive,
+  wrap the host job in a `try`/`catch` that throws a sanitised
+  exception, or call `CronMonitorClient::fail($uuid, $body)` directly
+  with a curated body.
 
 ## Development
 

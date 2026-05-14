@@ -22,3 +22,6 @@ parameters:
         -
             message: '#Function app not found#'
             path: src/Bridge/Laravel/CronMonitorServiceProvider.php
+        -
+            message: '#Function app not found#'
+            path: src/Bridge/Laravel/Queue/MonitorQueueJob.php
