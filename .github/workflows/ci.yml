@@ -43,7 +43,10 @@ jobs:
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: vendor/bin/php-cs-fixer fix --dry-run --diff
-      - run: vendor/bin/phpstan analyse --memory-limit=512M
+      # `--error-format=github` makes PHPStan emit `::error file=…,line=…`
+      # commands that GitHub Actions promotes to inline PR annotations,
+      # surfacing failures on the changed lines directly in the diff view.
+      - run: vendor/bin/phpstan analyse --memory-limit=512M --error-format=github --no-progress
 
   test:
     name: Test (PHP ${{ matrix.php }})
