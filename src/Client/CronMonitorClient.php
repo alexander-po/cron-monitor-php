@@ -29,10 +29,12 @@ use Psr\Log\NullLogger;
 final class CronMonitorClient
 {
     /**
-     * Server enforces 10 KB on `body_excerpt`. Client-side cap mirrors that
-     * to avoid spending bandwidth on bytes the server will throw away.
+     * Server enforces `Ping::BODY_EXCERPT_MAX_BYTES = 10_000` (see the
+     * cron-monitor backend's `src/Entity/Ping.php`). Client-side cap mirrors
+     * the exact server value so we don't waste bandwidth on bytes the server
+     * will silently truncate.
      */
-    private const BODY_CAP_BYTES = 10240;
+    private const BODY_CAP_BYTES = 10000;
 
     private const USER_AGENT = 'cron-monitor-php-sdk/0.1';
 

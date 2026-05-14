@@ -23,7 +23,7 @@ final class CronMonitorClientTest extends TestCase
         $http = new RecordingHttpClient([new Response(200)]);
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io'),
+            new Configuration('https://cronheart.com'),
             $http,
             $factory,
             $factory,
@@ -39,7 +39,7 @@ final class CronMonitorClientTest extends TestCase
         $request = $http->requests[0];
         self::assertSame('POST', $request->getMethod());
         self::assertSame(
-            'https://cron-monitor.io/ping/'.self::UUID,
+            'https://cronheart.com/ping/'.self::UUID,
             (string) $request->getUri(),
         );
         self::assertStringContainsString(
@@ -53,7 +53,7 @@ final class CronMonitorClientTest extends TestCase
         $http = new RecordingHttpClient([new Response(204)]);
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io'),
+            new Configuration('https://cronheart.com'),
             $http,
             $factory,
             $factory,
@@ -63,17 +63,17 @@ final class CronMonitorClientTest extends TestCase
 
         self::assertTrue($result->delivered);
         self::assertSame(
-            'https://cron-monitor.io/ping/'.self::UUID.'/start',
+            'https://cronheart.com/ping/'.self::UUID.'/start',
             (string) $http->requests[0]->getUri(),
         );
     }
 
-    public function test_body_is_truncated_to_10kb_with_marker(): void
+    public function test_body_is_truncated_to_server_cap_with_marker(): void
     {
         $http = new RecordingHttpClient([new Response(200)]);
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io'),
+            new Configuration('https://cronheart.com'),
             $http,
             $factory,
             $factory,
@@ -83,7 +83,10 @@ final class CronMonitorClientTest extends TestCase
         $client->success(self::UUID, $hugeBody);
 
         $sent = (string) $http->requests[0]->getBody();
-        self::assertSame(10240, \strlen($sent));
+        // Server (cron-monitor backend `Ping::BODY_EXCERPT_MAX_BYTES`) caps
+        // at 10_000 bytes; the SDK matches exactly so the wire payload has no
+        // bytes the server will silently truncate.
+        self::assertSame(10000, \strlen($sent));
         self::assertStringEndsWith('[truncated by SDK]', $sent);
     }
 
@@ -92,7 +95,7 @@ final class CronMonitorClientTest extends TestCase
         $http = new RecordingHttpClient([new Response(404)]);
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io', retries: 3),
+            new Configuration('https://cronheart.com', retries: 3),
             $http,
             $factory,
             $factory,
@@ -116,7 +119,7 @@ final class CronMonitorClientTest extends TestCase
         $factory = new HttpFactory();
         $logger = new InMemoryLogger();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io', retries: 2),
+            new Configuration('https://cronheart.com', retries: 2),
             $http,
             $factory,
             $factory,
@@ -145,7 +148,7 @@ final class CronMonitorClientTest extends TestCase
         $http = new RecordingHttpClient([$exception]);
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io', retries: 0),
+            new Configuration('https://cronheart.com', retries: 0),
             $http,
             $factory,
             $factory,
@@ -164,7 +167,7 @@ final class CronMonitorClientTest extends TestCase
         $factory = new HttpFactory();
         $logger = new InMemoryLogger();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io'),
+            new Configuration('https://cronheart.com'),
             $http,
             $factory,
             $factory,
@@ -190,7 +193,7 @@ final class CronMonitorClientTest extends TestCase
         $http = new RecordingHttpClient([new Response(200)]);
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io', apiKey: 'sk_test_123'),
+            new Configuration('https://cronheart.com', apiKey: 'sk_test_123'),
             $http,
             $factory,
             $factory,

@@ -17,7 +17,7 @@ namespace CronMonitor\Client;
  */
 final class Configuration
 {
-    public const DEFAULT_ENDPOINT = 'https://cron-monitor.io';
+    public const DEFAULT_ENDPOINT = 'https://cronheart.com';
 
     public const DEFAULT_TIMEOUT_SECONDS = 5.0;
 
@@ -94,7 +94,12 @@ final class Configuration
             return $base;
         }
 
-        if (1 !== preg_match('/^[a-z0-9_-]{1,32}$/i', $action)) {
+        // Mirror the server's route requirement: `action: [a-zA-Z0-9_-]{1,16}`
+        // (see `cron-monitor` backend `PingController::action()` route
+        // attribute). A client-side reject is friendlier than a server 404 and
+        // also defends against accidental path-injection if a future caller
+        // ever read the action segment from user input.
+        if (1 !== preg_match('/^[a-z0-9_-]{1,16}$/i', $action)) {
             throw new \InvalidArgumentException(\sprintf('%s is not a valid ping action.', $action));
         }
 

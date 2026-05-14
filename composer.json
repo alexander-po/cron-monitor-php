@@ -1,6 +1,6 @@
 {
     "name": "cron-monitor/php-sdk",
-    "description": "PHP SDK for cron-monitor.io with first-class Symfony Scheduler and Laravel Scheduler support.",
+    "description": "PHP SDK for cronheart.com (cron-monitor) with first-class Symfony Scheduler and Laravel Scheduler support.",
     "type": "library",
     "license": "MIT",
     "keywords": [
