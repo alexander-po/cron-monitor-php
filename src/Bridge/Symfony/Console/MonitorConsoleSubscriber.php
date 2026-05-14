@@ -178,7 +178,16 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
             return null;
         }
 
-        return $this->commandMap[$commandName] ?? null;
+        // Treat an empty-string mapping (the common shape when the UUID
+        // comes from an env var that is intentionally blank outside prod,
+        // e.g. `'app:reports:nightly' => '%env(MY_UUID)%'`) as "unmapped".
+        // Without this guard the SDK's UUID-v4 validation would throw on
+        // every invocation, the caught exception would surface as a
+        // warning log line, and dev runs would emit one false alarm per
+        // command execution.
+        $uuid = $this->commandMap[$commandName] ?? null;
+
+        return ('' === $uuid) ? null : $uuid;
     }
 
     /**
