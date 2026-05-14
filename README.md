@@ -20,7 +20,7 @@ switch does. This SDK takes the boilerplate out of wiring it up.
 composer require cron-monitor/php-sdk
 ```
 
-PHP ≥ 8.1. PSR-18 / PSR-17 / PSR-3 dependencies are abstract — bring any
+PHP ≥ 8.2. PSR-18 / PSR-17 / PSR-3 dependencies are abstract — bring any
 HTTP client, the SDK falls back to Guzzle when one is not bound.
 
 ## Quick start (framework-agnostic)
