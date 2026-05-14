@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Bridge\Symfony\DependencyInjection;
 
+use CronMonitor\Bridge\Symfony\Console\MonitorConsoleSubscriber;
 use CronMonitor\Bridge\Symfony\Messenger\MonitorPingMiddleware;
 use CronMonitor\Client\Configuration as ClientConfiguration;
 use CronMonitor\Client\CronMonitorClient;
@@ -41,6 +42,11 @@ final class CronMonitorExtension extends Extension
         $container
             ->getDefinition(MonitorPingMiddleware::class)
             ->replaceArgument(1, $config['messages']);
+
+        // Same trick for the console subscriber's command map.
+        $container
+            ->getDefinition(MonitorConsoleSubscriber::class)
+            ->replaceArgument(1, $config['commands']);
     }
 
     public function getAlias(): string
