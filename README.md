@@ -20,8 +20,21 @@ switch does. This SDK takes the boilerplate out of wiring it up.
 composer require cron-monitor/php-sdk
 ```
 
-PHP ≥ 8.2. PSR-18 / PSR-17 / PSR-3 dependencies are abstract — bring any
-HTTP client, the SDK falls back to Guzzle when one is not bound.
+PHP ≥ 8.2.
+
+- **Symfony bundle path** (`composer require cron-monitor/php-sdk` in a
+  Symfony 7 project): drop-in. The bundle binds PSR-17 factories
+  (via the bundled `nyholm/psr7`) and the PSR-18 client (via
+  `symfony/http-client`'s `Psr18Client`, present in virtually all
+  modern Symfony projects) out of the box. Already wired your own
+  PSR-17 / PSR-18 (Flex recipes, custom factories)? Your bindings
+  override the bundle defaults automatically.
+- **Framework-agnostic path** (plain PHP / Laravel / Slim, etc.): bring
+  your own PSR-18 client + PSR-17 factory and pass them to the
+  `CronMonitorClient` constructor (see Quick start below). The Laravel
+  bridge auto-discovers Guzzle's `HttpFactory` + Guzzle's HTTP client
+  when bound, and falls back to them if you haven't bound a
+  `ClientInterface` / `RequestFactoryInterface` in the container.
 
 ## Quick start (framework-agnostic)
 
