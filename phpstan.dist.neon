@@ -12,16 +12,8 @@ parameters:
         # functional tests in the host application instead.
         - src/Bridge/Symfony/Resources/config/services.php
     treatPhpDocTypesAsCertain: false
-    ignoreErrors:
-        # `app()` is a Laravel-side global helper available everywhere
-        # inside a booted Laravel application (defined in
-        # illuminate/foundation, which is not pulled in as a dev-dep —
-        # we only depend on the lighter illuminate/* facets we actually
-        # use). The macro that calls it runs only when Laravel is the
-        # host framework, so the helper is guaranteed to exist at runtime.
-        -
-            message: '#Function app not found#'
-            path: src/Bridge/Laravel/CronMonitorServiceProvider.php
-        -
-            message: '#Function app not found#'
-            path: src/Bridge/Laravel/Queue/MonitorQueueJob.php
+    # `app()` is a Laravel-side global helper available everywhere inside a
+    # booted Laravel application (defined in illuminate/foundation, which we
+    # do not pull in as a dev-dep). PHPStan picks up a minimal shim from
+    # `tests/bootstrap.php` so analyses of both `src/` and `tests/` resolve
+    # the function without per-file ignore rules.

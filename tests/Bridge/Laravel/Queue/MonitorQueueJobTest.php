@@ -10,12 +10,60 @@ use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Container\Container;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientExceptionInterface;
 
 final class MonitorQueueJobTest extends TestCase
 {
     private const UUID = '44444444-4444-4444-8444-444444444444';
+
+    protected function tearDown(): void
+    {
+        // `app()` (the shim in `tests/bootstrap.php`) resolves through the
+        // global container singleton. Reset it between tests so a binding
+        // made in one test does not leak into the next and mask `withUuid`'s
+        // unbound-container branch.
+        Container::setInstance(null);
+        parent::tearDown();
+    }
+
+    public function test_with_uuid_resolves_client_from_container_when_bound(): void
+    {
+        // Models the real production wiring: the Laravel service provider's
+        // `register()` method binds `CronMonitorClient` as a singleton. The
+        // `withUuid()` static factory must reach for the same binding so
+        // users can write `middleware()` without threading the client.
+        $http = new RecordingHttpClient([new Response(200), new Response(200)]);
+        $client = $this->buildClient($http);
+
+        $container = new Container();
+        $container->instance(CronMonitorClient::class, $client);
+        Container::setInstance($container);
+
+        $middleware = MonitorQueueJob::withUuid(self::UUID);
+        $middleware->handle(new \stdClass(), static fn () => 'ok');
+
+        self::assertCount(2, $http->requests);
+        self::assertStringEndsWith('/ping/'.self::UUID.'/start', (string) $http->requests[0]->getUri());
+        self::assertStringEndsWith('/ping/'.self::UUID.'/success', (string) $http->requests[1]->getUri());
+    }
+
+    public function test_with_uuid_falls_back_to_noop_when_container_cannot_resolve_client(): void
+    {
+        // Pathological setup: the service provider was never registered, or
+        // the worker boots before the container is ready. `app()` throws a
+        // BindingResolutionException because `CronMonitorClient` has
+        // unresolvable interface dependencies. The static factory must
+        // catch and return a no-op middleware — throwing here would crash
+        // the queue worker before the user's `handle()` ran.
+        Container::setInstance(new Container()); // empty container, no bindings
+
+        $middleware = MonitorQueueJob::withUuid(self::UUID);
+        $result = $middleware->handle(new \stdClass(), static fn () => 'still ran');
+
+        self::assertSame('still ran', $result);
+    }
 
     public function test_returning_handler_emits_start_then_success(): void
     {
@@ -101,14 +149,18 @@ final class MonitorQueueJobTest extends TestCase
 
     private function buildMiddleware(RecordingHttpClient $http): MonitorQueueJob
     {
+        return new MonitorQueueJob($this->buildClient($http), self::UUID);
+    }
+
+    private function buildClient(RecordingHttpClient $http): CronMonitorClient
+    {
         $factory = new HttpFactory();
-        $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io', retries: 0),
+
+        return new CronMonitorClient(
+            new Configuration('https://cronheart.com', retries: 0),
             $http,
             $factory,
             $factory,
         );
-
-        return new MonitorQueueJob($client, self::UUID);
     }
 }
