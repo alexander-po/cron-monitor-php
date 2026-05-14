@@ -53,6 +53,11 @@ final class Configuration implements ConfigurationInterface
                     ->useAttributeAsKey('class')
                     ->scalarPrototype()->end()
                 ->end()
+                ->arrayNode('commands')
+                    ->info('Map of console command name (e.g. "app:reports:nightly") => monitor UUID. Each invocation is wrapped in start/success/fail pings via a kernel event subscriber.')
+                    ->useAttributeAsKey('name')
+                    ->scalarPrototype()->end()
+                ->end()
             ->end();
 
         return $treeBuilder;

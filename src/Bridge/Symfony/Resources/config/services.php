@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use CronMonitor\Bridge\Symfony\Console\MonitorConsoleSubscriber;
 use CronMonitor\Bridge\Symfony\Console\SyncCommand;
 use CronMonitor\Bridge\Symfony\Messenger\MonitorPingMiddleware;
 use CronMonitor\Bridge\Symfony\Scheduler\ScheduleInventory;
@@ -42,6 +43,18 @@ return static function (ContainerConfigurator $container): void {
             [], // overridden by CronMonitorExtension::load (positional arg #2)
             service(LoggerInterface::class)->ignoreOnInvalid(),
         ]);
+
+    // Console subscriber wraps `bin/console <name>` invocations whose command
+    // name appears in the configured `commands:` map. Tagged as a kernel
+    // event subscriber so Symfony's EventDispatcher picks it up — no extra
+    // wiring required on the user's side.
+    $services->set(MonitorConsoleSubscriber::class)
+        ->args([
+            service(CronMonitorClient::class),
+            [], // overridden by CronMonitorExtension::load
+            service(LoggerInterface::class)->ignoreOnInvalid(),
+        ])
+        ->tag('kernel.event_subscriber');
 
     // The Scheduler bridge collects every service tagged
     // `scheduler.schedule_provider` (Symfony's own tag). Users get this for
