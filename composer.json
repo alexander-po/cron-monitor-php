@@ -12,7 +12,12 @@
         "healthcheck",
         "deadman-switch"
     ],
-    "homepage": "https://github.com/alexander-po/cron-monitor-php",
+    "homepage": "https://cronheart.com",
+    "support": {
+        "issues": "https://github.com/alexander-po/cron-monitor-php/issues",
+        "source": "https://github.com/alexander-po/cron-monitor-php",
+        "docs": "https://github.com/alexander-po/cron-monitor-php#readme"
+    },
     "require": {
         "php": ">=8.1",
         "psr/http-client": "^1.0",
@@ -75,5 +80,17 @@
         "sort-packages": true
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "archive": {
+        "exclude": [
+            "/tests",
+            "/.github",
+            "/.phpunit.cache",
+            "/.php-cs-fixer.cache",
+            "/.php-cs-fixer.dist.php",
+            "/phpstan.dist.neon",
+            "/phpunit.dist.xml",
+            "/CLAUDE.md"
+        ]
+    }
 }
