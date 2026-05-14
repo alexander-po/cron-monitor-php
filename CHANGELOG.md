@@ -8,6 +8,31 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [0.1.1] — 2026-05-14
+
+### Fixed
+
+- **Symfony bundle no longer crashes the consumer's container compile.**
+  `Resources/config/services.php` called `service()` and
+  `tagged_iterator()` without `use function …\Configurator\service`
+  imports, so PHP resolved them to the global namespace and every
+  consumer's first `cache:clear --env=prod` died with `Call to
+  undefined function service()`. The SDK's own test suite never
+  surfaced this because it builds the container via PHPUnit fixtures
+  that short-circuit services.php loading; an actual `composer
+  require cron-monitor/php-sdk` + Symfony kernel boot hit it
+  immediately. Imports added. **Follow-up:** add a `MicroKernel`-based
+  integration smoke test so this exact regression cannot recur.
+- **Empty-string UUID mappings are now treated as "unmapped" in both
+  `MonitorConsoleSubscriber` and `MonitorPingMiddleware`.** The
+  recommended wiring pattern is to map a command / message FQCN to
+  `'%env(MY_UUID)%'` and leave that env var blank outside prod —
+  before this fix, dev/test runs of those commands would call
+  `CronMonitorClient::start('')`, the SDK's UUID-v4 validator would
+  throw, `safePing` would catch it, and the bundle would emit one
+  warning log line per invocation. Both call-sites now short-circuit
+  on the empty string, producing zero noise.
+
 ## [0.1.0] — 2026-05-14
 
 First public release on Packagist. Composer SDK for the cron-monitor

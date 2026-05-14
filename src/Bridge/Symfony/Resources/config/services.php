@@ -14,6 +14,18 @@ use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 
+// `service()` and `tagged_iterator()` are namespaced helpers exported by
+// the configurator component — without an explicit `use function` import,
+// PHP resolves them to the global namespace and the container compile
+// fails with `Call to undefined function service()` the first time any
+// consumer's kernel boots this bundle. The SDK's own test suite never
+// triggered this because it builds the container via PHPUnit's symfony
+// kernel fixture, which short-circuits services.php loading; an actual
+// `composer require` + cache:clear inside a host project surfaces it
+// immediately.
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_iterator;
+
 return static function (ContainerConfigurator $container): void {
     // Service definitions for the Symfony bundle bridge. Configuration values
     // are injected by `CronMonitorExtension::load()` after the YAML has been

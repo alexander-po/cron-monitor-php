@@ -55,7 +55,11 @@ final class MonitorPingMiddleware implements MiddlewareInterface
 
         $message = $envelope->getMessage();
         $uuid = $this->monitorMap[$message::class] ?? null;
-        if (null === $uuid) {
+        // Empty-string mapping (`'App\Message\Foo' => '%env(FOO_UUID)%'`
+        // with FOO_UUID blank in dev/test) is treated as "unmapped" so the
+        // SDK's UUID-v4 validator does not throw on every consumed
+        // envelope. See the matching guard in `MonitorConsoleSubscriber`.
+        if (null === $uuid || '' === $uuid) {
             return $stack->next()->handle($envelope, $stack);
         }
 
