@@ -8,6 +8,35 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [0.1.3] — 2026-05-14
+
+### Changed
+
+- **Symfony bundle is now drop-in.** `nyholm/psr7` (~30 KB, zero
+  transitive deps, the de-facto PSR-17 standard in the Symfony
+  ecosystem) is bundled as a hard dependency, and the bundle's
+  `services.php` registers it under `cron_monitor.psr17_factory`
+  aliased to `RequestFactoryInterface` and `StreamFactoryInterface`.
+  When `symfony/http-client` is present (the common case in Symfony 7
+  projects), `Psr18Client` is also registered and aliased to
+  `ClientInterface`. Net effect: `composer require
+  cron-monitor/php-sdk` is now actually drop-in for Symfony 7 — no
+  second `composer require nyholm/psr7` + `symfony/psr-http-message-
+  bridge` step, no `EnvNotFoundException` on first cache:clear from
+  unmet PSR-17 service requirements.
+- Consumers who already wire their own PSR-17 / PSR-18 (via the
+  nyholm/psr7 Flex recipe, a custom service definition, guzzlehttp/psr7,
+  slim/psr7, etc.) keep winning the alias resolution — Symfony applies
+  consumer aliases AFTER bundle extensions load, so the bundle defaults
+  exist as fallback only.
+- **README install section rewritten** to honestly describe the two
+  integration paths. The old "the SDK falls back to Guzzle when one is
+  not bound" line was true only for the framework-agnostic
+  `CronMonitorClient` constructor path; in the Symfony bundle path,
+  `services.php` declared PSR-17 services as hard dependencies and the
+  container compile failed with a non-existent-service error. Now both
+  paths are documented accurately.
+
 ## [0.1.2] — 2026-05-14
 
 ### Fixed
