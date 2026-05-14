@@ -23,6 +23,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Minimum PHP version raised from 8.1 to 8.2.** PHP 8.1 reached end of
+  security support in November 2024 and ships no further upstream
+  patches; adopters still on 8.1 are running an unpatched runtime
+  regardless of which package they require. CI matrix now covers
+  `8.2 / 8.3 / 8.4` (latest stable). Bumping the floor at the v0.1.x
+  line — before any stable major — is the cheapest moment to set the
+  right baseline. **BC note:** consumers pinned to PHP 8.1 must upgrade
+  the runtime before pulling this release.
 - **Default endpoint is now `https://cronheart.com`** (was
   `https://cron-monitor.io`) to match the production host of the
   cron-monitor service. Self-hosted installs override via

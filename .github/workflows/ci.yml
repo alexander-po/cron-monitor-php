@@ -16,12 +16,14 @@ permissions:
   contents: read
 
 jobs:
-  # PHPStan + php-cs-fixer are deterministic on the host PHP version, so
-  # there's no value in running them across the full 8.1/8.2/8.3 matrix.
-  # The `test` job below covers cross-version regressions where the actual
-  # behaviour can drift (it's how we caught the symfony/config 8.1 issue).
+  # Style, static analysis, manifest validation, platform-reqs and security
+  # audit all run on a single PHP version. These tools are deterministic on
+  # the host PHP, so a matrix would just duplicate work. Pinned to the
+  # composer.json floor (8.2) so the parser used to read src/ matches the
+  # version we promise to support — code using 8.3-only syntax fails here,
+  # not in a consumer's lock-resolve six months later.
   lint:
-    name: Lint (PHP 8.2)
+    name: Lint & audit (PHP 8.2)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,24 +39,41 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.composer/cache
-          key: composer-8.2-${{ hashFiles('composer.json') }}
-          restore-keys: composer-8.2-
+          key: composer-lint-${{ hashFiles('composer.json') }}
+          restore-keys: composer-lint-
 
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress --prefer-dist
+      # Catches accidental `ext-*` requirements (or PHP version mismatches)
+      # that composer's own resolver would have silently accepted but a
+      # consumer's host would refuse. Cheap declarative check.
+      - run: composer check-platform-reqs
       - run: vendor/bin/php-cs-fixer fix --dry-run --diff
       # `--error-format=github` makes PHPStan emit `::error file=…,line=…`
       # commands that GitHub Actions promotes to inline PR annotations,
       # surfacing failures on the changed lines directly in the diff view.
       - run: vendor/bin/phpstan analyse --memory-limit=512M --error-format=github --no-progress
+      # composer.lock is git-ignored for libraries (per Composer's library
+      # guidance), so `composer audit --locked` would fail — the install
+      # step above produced an installed.json we audit against the
+      # advisory DB. Folded into lint to avoid a second runner spin-up.
+      - run: composer audit
 
   test:
-    name: Test (PHP ${{ matrix.php }})
+    name: Test (PHP ${{ matrix.php }}${{ matrix.deps == 'lowest' && ' / lowest deps' || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.1', '8.2', '8.3']
+        php: ['8.2', '8.3', '8.4']
+        deps: ['highest']
+        include:
+          # Catches "claims to support symfony/* ^6.4 || ^7.0 but actually
+          # uses 7.x-only API" drift on the minimum supported PHP + the
+          # lowest dep range. One entry suffices: the same drift would
+          # surface identically on 8.3 / 8.4 — no value in duplicating.
+          - php: '8.2'
+            deps: 'lowest'
     steps:
       - uses: actions/checkout@v4
 
@@ -69,27 +88,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.composer/cache
-          key: composer-${{ matrix.php }}-${{ hashFiles('composer.json') }}
-          restore-keys: composer-${{ matrix.php }}-
+          key: composer-${{ matrix.php }}-${{ matrix.deps }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-${{ matrix.deps }}-
 
-      - run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Install dependencies (${{ matrix.deps }})
+        run: |
+          if [ "${{ matrix.deps }}" = "lowest" ]; then
+            composer update --prefer-lowest --prefer-stable --no-interaction --no-progress --prefer-dist
+          else
+            composer install --no-interaction --no-progress --prefer-dist
+          fi
+
       - run: vendor/bin/phpunit
-
-  security:
-    name: Security audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          coverage: none
-          tools: composer:v2
-
-      # composer.lock is git-ignored for libraries (per Composer's library
-      # guidance), so `composer audit --locked` would fail. Run an install
-      # first to get a lock-equivalent for the audit pass.
-      - run: composer install --no-interaction --no-progress --prefer-dist
-      - run: composer audit
