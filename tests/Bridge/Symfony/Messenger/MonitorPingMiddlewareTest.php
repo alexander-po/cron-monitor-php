@@ -91,7 +91,7 @@ final class MonitorPingMiddlewareTest extends TestCase
     {
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
-            new Configuration('https://cron-monitor.io'),
+            new Configuration('https://cronheart.com'),
             $http,
             $factory,
             $factory,

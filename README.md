@@ -1,6 +1,6 @@
 # cron-monitor PHP SDK
 
-Composer SDK for [cron-monitor.io](https://cron-monitor.io) — a Healthchecks-style
+Composer SDK for [cronheart.com](https://cronheart.com) — a Healthchecks-style
 service that pings you when a scheduled job stops running. First-class
 support for **Symfony Scheduler** and the **Laravel scheduler**.
 
@@ -11,7 +11,7 @@ support for **Symfony Scheduler** and the **Laravel scheduler**.
 
 Uptime monitors don't catch the silent failure mode: a backup that stopped
 running a month ago, an invoice job that didn't fire on the 1st, an ETL
-pipeline whose systemd timer was renamed. cron-monitor's per-job dead-man
+pipeline whose systemd timer was renamed. cronheart's per-job dead-man
 switch does. This SDK takes the boilerplate out of wiring it up.
 
 ## Install
@@ -179,7 +179,7 @@ to avoid repeating the flags.
 
 | Setting                    | Default                  | Notes |
 |----------------------------|--------------------------|-------|
-| `endpoint`                 | `https://cron-monitor.io`| Self-hosted: point at your install. |
+| `endpoint`                 | `https://cronheart.com`  | Self-hosted: point at your install. |
 | `timeout_seconds`          | `5.0`                    | Per-request, low by design. |
 | `retries`                  | `1`                      | Pings are idempotent server-side. |
 | `api_key`                  | `null`                   | Reserved for future authenticated routes. |

@@ -78,6 +78,13 @@ final class MonitorQueueJob
      * throw here would crash the worker before the user's `handle()`
      * method ever ran. That violates the SDK's "never break the host job"
      * contract.
+     *
+     * The catch is intentionally `\Throwable` (not `\Exception`): the
+     * Laravel container raises `BindingResolutionException` for the
+     * happy-path failure, but unrecoverable constructor problems
+     * surface as `\Error` (`TypeError`, `ArgumentCountError`,
+     * `UnhandledMatchError`) — all of which must equally not break
+     * the host job.
      */
     public static function withUuid(string $monitorUuid): self
     {
