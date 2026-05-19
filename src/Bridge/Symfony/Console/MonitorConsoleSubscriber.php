@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace CronMonitor\Bridge\Symfony\Console;
 
+use CronMonitor\Attribute\Monitor;
 use CronMonitor\Client\CronMonitorClient;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\Event\ConsoleCommandEvent;
 use Symfony\Component\Console\Event\ConsoleErrorEvent;
@@ -81,6 +83,20 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
     private array $errorByRun = [];
 
     /**
+     * Per-class cache of UUIDs resolved from `#[Monitor]` attributes. Keyed
+     * by Command FQCN. Long-lived processes such as `messenger:consume` may
+     * dispatch thousands of console commands per worker lifetime; without a
+     * cache each one re-runs `ReflectionClass::getAttributes(...)`, which is
+     * cheap but not free.
+     *
+     * Cache misses are stored as `null` so the second invocation of an
+     * attribute-less command doesn't re-reflect either.
+     *
+     * @var array<class-string<Command>, ?string>
+     */
+    private array $attributeUuidCache = [];
+
+    /**
      * @param array<string, string> $commandMap command name (as registered, e.g. "app:reports:nightly") => monitor UUID
      */
     public function __construct(
@@ -101,7 +117,7 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
 
     public function onCommand(ConsoleCommandEvent $event): void
     {
-        $uuid = $this->resolveUuid($event->getCommand()?->getName());
+        $uuid = $this->resolveUuid($event->getCommand());
         if (null === $uuid) {
             return;
         }
@@ -120,7 +136,7 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
 
     public function onError(ConsoleErrorEvent $event): void
     {
-        $uuid = $this->resolveUuid($event->getCommand()?->getName());
+        $uuid = $this->resolveUuid($event->getCommand());
         if (null === $uuid) {
             return;
         }
@@ -144,7 +160,7 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
         $error = $this->errorByRun[$runKey] ?? null;
         unset($this->errorByRun[$runKey]);
 
-        $uuid = $this->resolveUuid($event->getCommand()?->getName());
+        $uuid = $this->resolveUuid($event->getCommand());
         if (null === $uuid) {
             return;
         }
@@ -172,22 +188,58 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
         $this->safePing(fn () => $this->client->fail($uuid, $body));
     }
 
-    private function resolveUuid(?string $commandName): ?string
+    private function resolveUuid(?Command $command): ?string
     {
-        if (null === $commandName || '' === $commandName) {
+        if (null === $command) {
             return null;
         }
 
-        // Treat an empty-string mapping (the common shape when the UUID
-        // comes from an env var that is intentionally blank outside prod,
-        // e.g. `'app:reports:nightly' => '%env(MY_UUID)%'`) as "unmapped".
-        // Without this guard the SDK's UUID-v4 validation would throw on
-        // every invocation, the caught exception would surface as a
-        // warning log line, and dev runs would emit one false alarm per
-        // command execution.
-        $uuid = $this->commandMap[$commandName] ?? null;
+        // The explicit YAML / config map wins over the attribute. Users
+        // sometimes want to override an attribute-set UUID per environment
+        // — e.g. blank in dev to silence the monitor, populated from an env
+        // var in prod — and an explicit override is more discoverable than
+        // having to remove the attribute itself.
+        $commandName = $command->getName();
+        if (null !== $commandName && '' !== $commandName) {
+            $mapped = $this->commandMap[$commandName] ?? null;
+            // Treat an empty-string mapping (the common shape when the
+            // UUID comes from an env var that is intentionally blank
+            // outside prod, e.g. `'app:reports:nightly' => '%env(MY_UUID)%'`)
+            // as an *explicit* "do not monitor this in this environment".
+            // The empty string is a deliberate user choice; it must shadow
+            // any attribute on the class so deploy-time configuration wins
+            // over compile-time declaration.
+            if (\array_key_exists($commandName, $this->commandMap)) {
+                return ('' === $mapped) ? null : $mapped;
+            }
+        }
 
-        return ('' === $uuid) ? null : $uuid;
+        // Attribute fallback: scan the command class for `#[Monitor]`. The
+        // result (UUID or null) is cached per-class for the lifetime of the
+        // subscriber so long-lived workers don't re-reflect on every
+        // command dispatch.
+        return $this->resolveAttributeUuid($command);
+    }
+
+    private function resolveAttributeUuid(Command $command): ?string
+    {
+        $class = $command::class;
+        if (\array_key_exists($class, $this->attributeUuidCache)) {
+            return $this->attributeUuidCache[$class];
+        }
+
+        $reflection = new \ReflectionClass($class);
+        $attributes = $reflection->getAttributes(Monitor::class);
+        if ([] === $attributes) {
+            return $this->attributeUuidCache[$class] = null;
+        }
+
+        $uuid = $attributes[0]->newInstance()->uuid;
+
+        // Mirror the empty-string-as-unmapped policy from the YAML branch
+        // — a deliberate `#[Monitor(uuid: '')]` (rare, but plausible when
+        // expanding an env var that's empty) should not throw at ping time.
+        return $this->attributeUuidCache[$class] = ('' === $uuid) ? null : $uuid;
     }
 
     /**

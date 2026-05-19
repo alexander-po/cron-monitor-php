@@ -7,6 +7,8 @@ namespace CronMonitor\Tests\Bridge\Symfony\Console;
 use CronMonitor\Bridge\Symfony\Console\MonitorConsoleSubscriber;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Fixtures\Symfony\EmptyMonitorAttributeCommand;
+use CronMonitor\Tests\Fixtures\Symfony\MonitoredAttributedCommand;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
@@ -203,6 +205,172 @@ final class MonitorConsoleSubscriberTest extends TestCase
         self::assertCount(4, $http->requests);
         self::assertStringEndsWith('/fail', (string) $http->requests[1]->getUri());
         self::assertStringEndsWith('/success', (string) $http->requests[3]->getUri());
+    }
+
+    public function test_monitor_attribute_drives_pings_without_yaml_entry(): void
+    {
+        // The attribute path covers the dominant "single command, single
+        // UUID" case where the user does not want to duplicate the mapping
+        // in YAML. `start` / `success` must fire with the attribute UUID
+        // even though `commandMap` is empty.
+        $http = new RecordingHttpClient([new Response(200), new Response(200)]);
+        $subscriber = $this->buildSubscriber($http, []);
+
+        $command = new MonitoredAttributedCommand();
+        $command->setName('app:via-attribute');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+        self::assertCount(2, $http->requests);
+        self::assertStringEndsWith(
+            '/ping/'.MonitoredAttributedCommand::UUID.'/start',
+            (string) $http->requests[0]->getUri(),
+        );
+        self::assertStringEndsWith(
+            '/ping/'.MonitoredAttributedCommand::UUID.'/success',
+            (string) $http->requests[1]->getUri(),
+        );
+    }
+
+    public function test_yaml_map_overrides_attribute_uuid(): void
+    {
+        // Explicit YAML wins over the attribute. Use case: an attribute on
+        // the class declares the prod UUID, but per-env YAML overrides it
+        // (e.g. a different cronheart project for staging).
+        $stagingUuid = '99999999-9999-4999-8999-999999999999';
+        $http = new RecordingHttpClient([new Response(200), new Response(200)]);
+        $subscriber = $this->buildSubscriber($http, [
+            'app:via-attribute' => $stagingUuid,
+        ]);
+
+        $command = new MonitoredAttributedCommand();
+        $command->setName('app:via-attribute');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+        self::assertCount(2, $http->requests);
+        self::assertStringEndsWith(
+            '/ping/'.$stagingUuid.'/start',
+            (string) $http->requests[0]->getUri(),
+        );
+        // And the attribute UUID was *not* used — proves YAML truly shadowed
+        // it rather than the two firing in parallel.
+        self::assertStringNotContainsString(
+            MonitoredAttributedCommand::UUID,
+            (string) $http->requests[0]->getUri(),
+        );
+    }
+
+    public function test_yaml_empty_string_suppresses_attribute_for_this_environment(): void
+    {
+        // A common ops pattern: `'app:via-attribute' => '%env(MY_UUID)%'`
+        // with MY_UUID blank in dev. The empty string is an *explicit*
+        // "don't monitor here" override and must shadow any class-level
+        // attribute — otherwise the user can never turn off attribute-set
+        // commands per environment without removing the attribute from the
+        // source.
+        $http = new RecordingHttpClient([]);
+        $subscriber = $this->buildSubscriber($http, [
+            'app:via-attribute' => '',
+        ]);
+
+        $command = new MonitoredAttributedCommand();
+        $command->setName('app:via-attribute');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+        self::assertCount(0, $http->requests);
+    }
+
+    public function test_attribute_resolved_command_emits_fail_with_exception_summary(): void
+    {
+        // Symmetry test against the YAML-path failure case
+        // (`test_error_then_terminate_emits_fail_with_exception_summary`).
+        // Attribute resolution must drive the same start/fail lifecycle —
+        // attribute being the discovery channel does not change anything
+        // about how the subscriber handles a thrown command.
+        $http = new RecordingHttpClient([new Response(200), new Response(200)]);
+        $subscriber = $this->buildSubscriber($http, []);
+
+        $command = new MonitoredAttributedCommand();
+        $command->setName('app:via-attribute');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onError(new ConsoleErrorEvent($input, $output, new \RuntimeException('reports blew up'), $command));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 1));
+
+        self::assertCount(2, $http->requests);
+        self::assertStringEndsWith(
+            '/ping/'.MonitoredAttributedCommand::UUID.'/fail',
+            (string) $http->requests[1]->getUri(),
+        );
+        self::assertStringContainsString('RuntimeException: reports blew up', (string) $http->requests[1]->getBody());
+    }
+
+    public function test_empty_string_attribute_uuid_is_treated_as_unmapped(): void
+    {
+        // The attribute branch mirrors the YAML branch's empty-string
+        // policy: a deliberate `#[Monitor(uuid: '')]` (rare, but plausible
+        // when expanding an env var that resolves to empty at attribute
+        // construction time) must NOT throw at ping time. The subscriber
+        // should silently skip monitoring for that command.
+        $command = new EmptyMonitorAttributeCommand();
+        $command->setName('app:empty-attr');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $http = new RecordingHttpClient([]);
+        $subscriber = $this->buildSubscriber($http, []);
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+        self::assertCount(0, $http->requests);
+    }
+
+    public function test_attribute_uuid_is_cached_per_class(): void
+    {
+        // Long-lived workers (messenger:consume, queue:work) dispatch the
+        // same command class many times. Reflection should run once per
+        // class and the cache should serve subsequent lookups.
+        $http = new RecordingHttpClient([
+            new Response(200), new Response(200), // run 1
+            new Response(200), new Response(200), // run 2
+        ]);
+        $subscriber = $this->buildSubscriber($http, []);
+
+        $output = new NullOutput();
+        for ($i = 0; $i < 2; ++$i) {
+            $command = new MonitoredAttributedCommand();
+            $command->setName('app:via-attribute');
+            $input = new ArrayInput([]);
+            $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+            $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+        }
+
+        self::assertCount(4, $http->requests);
+
+        $reflection = new \ReflectionObject($subscriber);
+        $property = $reflection->getProperty('attributeUuidCache');
+        $property->setAccessible(true);
+        /** @var array<string, ?string> $cache */
+        $cache = $property->getValue($subscriber);
+        // Exactly one cache entry — the command class. Multiple entries
+        // would imply we're re-reflecting per instance instead of per
+        // class.
+        self::assertCount(1, $cache);
+        self::assertSame(MonitoredAttributedCommand::UUID, $cache[MonitoredAttributedCommand::class]);
     }
 
     /**
