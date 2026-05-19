@@ -6,6 +6,9 @@ monitoring for scheduled jobs. Get pinged when a cron / systemd timer
 **Symfony Scheduler** and the **Laravel scheduler**.
 
 [![CI](https://github.com/alexander-po/cron-monitor-php/actions/workflows/ci.yml/badge.svg)](https://github.com/alexander-po/cron-monitor-php/actions/workflows/ci.yml)
+[![Latest Version](https://img.shields.io/packagist/v/cron-monitor/php-sdk.svg)](https://packagist.org/packages/cron-monitor/php-sdk)
+[![Monthly Downloads](https://img.shields.io/packagist/dm/cron-monitor/php-sdk.svg)](https://packagist.org/packages/cron-monitor/php-sdk)
+[![PHP Version](https://img.shields.io/packagist/php-v/cron-monitor/php-sdk.svg)](https://packagist.org/packages/cron-monitor/php-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Why
@@ -14,6 +17,23 @@ Uptime monitors don't catch the silent failure mode: a backup that stopped
 running a month ago, an invoice job that didn't fire on the 1st, an ETL
 pipeline whose systemd timer was renamed. cronheart's per-job dead-man
 switch does. This SDK takes the boilerplate out of wiring it up.
+
+## What's in the box
+
+- **Drop-in Symfony bundle** — auto-registered; `bin/console cron-monitor:sync`
+  inventories Scheduler `RecurringMessage` providers and console commands.
+- **Drop-in Laravel package** — auto-discovered service provider;
+  `Schedule::command(...)->monitor()` macro and `MonitorQueueJob`
+  middleware for `ShouldQueue` jobs.
+- **`#[Monitor(uuid: ...)]` attribute** — the UUID lives on the command
+  class instead of being duplicated in YAML / config. Works on both
+  Symfony Console and Laravel Artisan commands.
+- **Zero extra dependencies** — bundled cURL PSR-18 transport and
+  `nyholm/psr7` factories. Bring Guzzle or `symfony/http-client` if you
+  want connection pooling; otherwise `composer require` is enough.
+- **Never breaks the host job** — every network / HTTP error becomes a
+  `PingResult::failed(...)` return value. A broken cron-monitor backend
+  cannot punish your scheduler.
 
 ## Install
 
