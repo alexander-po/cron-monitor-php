@@ -92,6 +92,14 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
      * Cache misses are stored as `null` so the second invocation of an
      * attribute-less command doesn't re-reflect either.
      *
+     * **Env-var lifecycle implication:** the `#[Monitor(env: 'VAR')]` form
+     * reads the env value at first lookup and caches the resolved UUID.
+     * A long-lived worker that has its UUID env var rotated mid-process
+     * will keep using the cached value until the worker restarts. In
+     * practice UUID rotation always implies a redeploy/restart anyway
+     * (the new UUID has no consumer until the next ping), so the
+     * worker-process lifetime is the right invalidation boundary.
+     *
      * @var array<class-string<Command>, ?string>
      */
     private array $attributeUuidCache = [];
@@ -234,12 +242,28 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
             return $this->attributeUuidCache[$class] = null;
         }
 
-        $uuid = $attributes[0]->newInstance()->uuid;
+        // `newInstance()` runs the attribute constructor, which can throw
+        // `\InvalidArgumentException` on a misused `#[Monitor]` (e.g. both
+        // `uuid:` and `env:` set, or neither). `resolveUuid()` itself
+        // does not throw, but defending the boundary keeps the SDK's
+        // never-break-the-host-job contract intact even if a future
+        // attribute change adds new invariants.
+        try {
+            $uuid = $attributes[0]->newInstance()->resolveUuid();
+        } catch (\Throwable $error) {
+            $this->logger->warning('cron-monitor: #[Monitor] attribute could not be instantiated', [
+                'command' => $command->getName(),
+                'class' => $class,
+                'exception' => $error::class,
+                'message' => $error->getMessage(),
+            ]);
 
-        // Mirror the empty-string-as-unmapped policy from the YAML branch
-        // — a deliberate `#[Monitor(uuid: '')]` (rare, but plausible when
-        // expanding an env var that's empty) should not throw at ping time.
-        return $this->attributeUuidCache[$class] = ('' === $uuid) ? null : $uuid;
+            return $this->attributeUuidCache[$class] = null;
+        }
+
+        // `resolveUuid()` already collapses empty literals / missing env
+        // vars to null, so no extra empty-string guard is needed here.
+        return $this->attributeUuidCache[$class] = $uuid;
     }
 
     /**

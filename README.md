@@ -166,17 +166,34 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 
 #[AsCommand(name: 'app:reports:nightly')]
-#[Monitor(uuid: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx')]
+#[Monitor(env: 'CRON_MONITOR_REPORTS_NIGHTLY_UUID')]
 final class GenerateNightlyReportCommand extends Command
 {
     // ...
 }
 ```
 
-Both sources are honoured, and **YAML wins on conflict** — so you can keep
-the prod UUID on the class and override it per environment in YAML (e.g.
-`'app:reports:nightly': '%env(MY_UUID)%'` with `MY_UUID` blank in dev to
-suppress monitoring without removing the attribute).
+Two attribute forms are supported:
+
+- `#[Monitor(env: 'VAR_NAME')]` — **recommended for production.** The
+  attribute carries the env-var *name*; the SDK resolves the value at
+  runtime via `$_ENV` → `$_SERVER` → `getenv()`. The UUID — a write
+  capability secret — stays out of git history and rotates without a
+  redeploy.
+- `#[Monitor(uuid: '...literal...')]` — convenient for local dev or
+  one-off scripts where the UUID is not sensitive.
+
+(`#[Monitor(uuid: getenv('VAR'))]` is a PHP parse error — attribute
+arguments must be compile-time constants — and `'%env(VAR)%'` is not
+expanded inside attribute payloads. The two-parameter shape is the
+intended way to thread env-sourced UUIDs into the attribute path.)
+
+Both attribute sources are honoured, and **YAML wins on conflict** —
+so you can override either form per environment in YAML (e.g.
+`'app:reports:nightly': '%env(MY_UUID)%'` with `MY_UUID` blank in dev
+to suppress monitoring without touching the attribute). A missing or
+empty env var is itself treated as deliberate suppression — same
+policy as an empty YAML map entry.
 
 No code changes inside the command body. A non-zero exit fires `fail`; an
 uncaught throwable fires `fail` with the exception class, message, and
@@ -212,20 +229,31 @@ Schedule::command(GenerateNightlyReportCommand::class)
 ```
 
 For the no-arg form, the macro reads the `#[Monitor]` attribute on the
-Artisan command class behind the scheduled event:
+Artisan command class behind the scheduled event. The attribute has
+two construction forms — env-sourced (recommended for production) and
+literal:
 
 ```php
 use CronMonitor\Attribute\Monitor;
 use Illuminate\Console\Command;
 
-#[Monitor(uuid: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx')]
+// Recommended for production — UUID stays out of git history.
+#[Monitor(env: 'CRON_MONITOR_REPORTS_NIGHTLY_UUID')]
 final class GenerateNightlyReportCommand extends Command
 {
     protected $signature = 'reports:nightly';
 
     // ...
 }
+
+// Or with a literal UUID — fine for local dev / one-off scripts.
+#[Monitor(uuid: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx')]
 ```
+
+The env-sourced form resolves through `$_ENV` → `$_SERVER` →
+`getenv()` so it works across CLI, FPM, and container-injected env
+setups. A missing or empty env var is treated as deliberate
+suppression for the current environment.
 
 Precedence rule: an explicit string argument to `->monitor(...)` always
 wins over the attribute, and an empty string (`->monitor(env('MY_UUID', ''))`)
