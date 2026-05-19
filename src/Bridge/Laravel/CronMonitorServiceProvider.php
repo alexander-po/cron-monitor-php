@@ -8,12 +8,12 @@ use CronMonitor\Bridge\Laravel\Console\SyncCommand;
 use CronMonitor\Bridge\Laravel\Scheduler\EventMonitor;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
-use GuzzleHttp\Client as GuzzleClient;
-use GuzzleHttp\Psr7\HttpFactory;
+use CronMonitor\Client\CurlPsr18Client;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\ServiceProvider;
+use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
@@ -54,32 +54,34 @@ final class CronMonitorServiceProvider extends ServiceProvider
 
         $this->app->singleton(CronMonitorClient::class, static function (Container $app) {
             // Resolve PSR-18 / PSR-17 dependencies. Laravel does not bind
-            // these by default, so we fall back to Guzzle (declared as a
-            // dev-suggest in composer.json — it must be present at runtime
-            // when this branch is taken). Users with a custom PSR-18 client
-            // can bind ClientInterface themselves and we'll honour it.
-            $http = $app->bound(ClientInterface::class)
-                ? $app->make(ClientInterface::class)
-                : new GuzzleClient([
-                    'timeout' => $app->make(Configuration::class)->timeoutSeconds,
-                ]);
+            // these by default, so we fall back to the bundled cURL transport
+            // + nyholm/psr7 factories — that way `composer require` is the
+            // only step needed, with no Guzzle dependency. Users who already
+            // bind a PSR-18 client or PSR-17 factories in the container get
+            // their bindings honoured.
+            $config = $app->make(Configuration::class);
+            $default = new Psr17Factory();
 
             $factory = $app->bound(RequestFactoryInterface::class)
                 ? $app->make(RequestFactoryInterface::class)
-                : new HttpFactory();
+                : $default;
 
             $streamFactory = $app->bound(StreamFactoryInterface::class)
                 ? $app->make(StreamFactoryInterface::class)
                 : (
-                    $factory instanceof StreamFactoryInterface ? $factory : new HttpFactory()
+                    $factory instanceof StreamFactoryInterface ? $factory : $default
                 );
+
+            $http = $app->bound(ClientInterface::class)
+                ? $app->make(ClientInterface::class)
+                : new CurlPsr18Client($default, $default, $config->timeoutSeconds);
 
             $logger = $app->bound(LoggerInterface::class)
                 ? $app->make(LoggerInterface::class)
                 : new NullLogger();
 
             return new CronMonitorClient(
-                $app->make(Configuration::class),
+                $config,
                 $http,
                 $factory,
                 $streamFactory,
