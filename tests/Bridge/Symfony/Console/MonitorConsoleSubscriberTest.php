@@ -7,12 +7,16 @@ namespace CronMonitor\Tests\Bridge\Symfony\Console;
 use CronMonitor\Bridge\Symfony\Console\MonitorConsoleSubscriber;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Fixtures\Symfony\BrokenMonitorAttributeCommand;
 use CronMonitor\Tests\Fixtures\Symfony\EmptyMonitorAttributeCommand;
+use CronMonitor\Tests\Fixtures\Symfony\EnvMonitoredAttributedCommand;
 use CronMonitor\Tests\Fixtures\Symfony\MonitoredAttributedCommand;
+use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\Event\ConsoleCommandEvent;
@@ -339,6 +343,127 @@ final class MonitorConsoleSubscriberTest extends TestCase
         self::assertCount(0, $http->requests);
     }
 
+    public function test_env_attribute_resolves_uuid_from_environment(): void
+    {
+        // The `env:` attribute form is the prod-recommended pattern: the
+        // UUID is a write capability secret that should live in env, not
+        // in git. `#[Monitor(uuid: getenv(...))]` is a PHP parse error
+        // (attribute args must be compile-time constant), so we carry
+        // the env-var *name* on the class and resolve at runtime.
+        $envUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $_ENV[EnvMonitoredAttributedCommand::ENV_VAR] = $envUuid;
+
+        try {
+            $http = new RecordingHttpClient([new Response(200), new Response(200)]);
+            $subscriber = $this->buildSubscriber($http, []);
+
+            $command = new EnvMonitoredAttributedCommand();
+            $command->setName('app:via-env-attribute');
+            $input = new ArrayInput([]);
+            $output = new NullOutput();
+
+            $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+            $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+            self::assertCount(2, $http->requests);
+            self::assertStringEndsWith(
+                '/ping/'.$envUuid.'/start',
+                (string) $http->requests[0]->getUri(),
+            );
+            self::assertStringEndsWith(
+                '/ping/'.$envUuid.'/success',
+                (string) $http->requests[1]->getUri(),
+            );
+        } finally {
+            unset($_ENV[EnvMonitoredAttributedCommand::ENV_VAR]);
+        }
+    }
+
+    public function test_env_attribute_with_missing_env_var_emits_no_pings(): void
+    {
+        // Production wiring pattern: same attribute deployed across
+        // environments, env var set in prod and absent in dev. The
+        // missing env var must shadow the attribute the same way an
+        // empty YAML map entry does — silently no-op, not throw.
+        unset($_ENV[EnvMonitoredAttributedCommand::ENV_VAR], $_SERVER[EnvMonitoredAttributedCommand::ENV_VAR]);
+        putenv(EnvMonitoredAttributedCommand::ENV_VAR);
+
+        $http = new RecordingHttpClient([]);
+        $subscriber = $this->buildSubscriber($http, []);
+
+        $command = new EnvMonitoredAttributedCommand();
+        $command->setName('app:via-env-attribute');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+        self::assertCount(0, $http->requests);
+    }
+
+    public function test_env_attribute_with_empty_env_var_emits_no_pings(): void
+    {
+        // Deliberate empty-string env var = "do not monitor in this
+        // environment". Same suppression semantics as the existing
+        // empty-literal `#[Monitor(uuid: '')]` and empty YAML map entry.
+        $_ENV[EnvMonitoredAttributedCommand::ENV_VAR] = '';
+
+        try {
+            $http = new RecordingHttpClient([]);
+            $subscriber = $this->buildSubscriber($http, []);
+
+            $command = new EnvMonitoredAttributedCommand();
+            $command->setName('app:via-env-attribute');
+            $input = new ArrayInput([]);
+            $output = new NullOutput();
+
+            $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+            $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+            self::assertCount(0, $http->requests);
+        } finally {
+            unset($_ENV[EnvMonitoredAttributedCommand::ENV_VAR]);
+        }
+    }
+
+    public function test_invariant_violation_is_swallowed_and_logged_as_warning(): void
+    {
+        // Realistic scenario: a developer migrates a command from
+        // `#[Monitor(uuid: '...')]` to `#[Monitor(env: '...')]` and
+        // forgets to remove the old literal. The attribute constructor
+        // throws on `newInstance()`; the subscriber must catch that,
+        // emit a warning so operators see the misuse, and continue
+        // — the command itself must still run.
+        $http = new RecordingHttpClient([]);
+        $logger = new InMemoryLogger();
+        $subscriber = $this->buildSubscriber($http, [], $logger);
+
+        $command = new BrokenMonitorAttributeCommand();
+        $command->setName('app:broken-attribute');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0));
+
+        // No pings fired — the attribute could not resolve to a UUID.
+        self::assertCount(0, $http->requests);
+
+        // The misuse was surfaced at warning level so operators have
+        // an audit trail rather than silent "monitoring just stopped".
+        $warnings = array_filter(
+            $logger->records,
+            static fn (array $r) => 'warning' === $r['level'],
+        );
+        self::assertCount(1, $warnings);
+
+        $warning = array_values($warnings)[0];
+        self::assertStringContainsString('#[Monitor] attribute could not be instantiated', $warning['message']);
+        self::assertSame(BrokenMonitorAttributeCommand::class, $warning['context']['class']);
+        self::assertSame(\InvalidArgumentException::class, $warning['context']['exception']);
+    }
+
     public function test_attribute_uuid_is_cached_per_class(): void
     {
         // Long-lived workers (messenger:consume, queue:work) dispatch the
@@ -376,8 +501,11 @@ final class MonitorConsoleSubscriberTest extends TestCase
     /**
      * @param array<string, string> $commandMap
      */
-    private function buildSubscriber(RecordingHttpClient $http, array $commandMap): MonitorConsoleSubscriber
-    {
+    private function buildSubscriber(
+        RecordingHttpClient $http,
+        array $commandMap,
+        ?LoggerInterface $logger = null,
+    ): MonitorConsoleSubscriber {
         $factory = new HttpFactory();
         $client = new CronMonitorClient(
             new Configuration('https://cronheart.com'),
@@ -386,7 +514,9 @@ final class MonitorConsoleSubscriberTest extends TestCase
             $factory,
         );
 
-        return new MonitorConsoleSubscriber($client, $commandMap);
+        return null === $logger
+            ? new MonitorConsoleSubscriber($client, $commandMap)
+            : new MonitorConsoleSubscriber($client, $commandMap, $logger);
     }
 
     private function commandNamed(string $name): Command

@@ -81,12 +81,23 @@ final class AttributeResolver
             return null;
         }
 
-        $uuid = $attributes[0]->newInstance()->uuid;
-
-        // Mirror the Symfony side: an empty attribute UUID is treated as
-        // an explicit "do not monitor" rather than passing through to the
-        // SDK where the UUID-v4 validator would reject it on every run.
-        return ('' === $uuid) ? null : $uuid;
+        // `newInstance()` runs the attribute constructor, which can throw
+        // `\InvalidArgumentException` on a misused `#[Monitor]` (e.g. both
+        // `uuid:` and `env:` set, or neither). Both that throw and the
+        // env-resolution itself happen inside this boundary, and the SDK's
+        // never-break-the-host-job contract requires that we collapse any
+        // failure to `null` rather than letting it surface during the
+        // scheduler-binding pass.
+        try {
+            return $attributes[0]->newInstance()->resolveUuid();
+        } catch (\Throwable) {
+            // Best-effort: a misused attribute is a programmer error
+            // worth surfacing, but not at the cost of breaking the
+            // host scheduler. The Symfony subscriber side logs the
+            // throw; the Laravel side has no logger handle at this
+            // pure-function call site, so we stay silent here.
+            return null;
+        }
     }
 
     /**
