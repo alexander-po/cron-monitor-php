@@ -1,8 +1,9 @@
 # cron-monitor PHP SDK
 
-Composer SDK for [cronheart.com](https://cronheart.com) — a Healthchecks-style
-service that pings you when a scheduled job stops running. First-class
-support for **Symfony Scheduler** and the **Laravel scheduler**.
+Composer SDK for [cronheart.com](https://cronheart.com) — heartbeat
+monitoring for scheduled jobs. Get pinged when a cron / systemd timer
+/ scheduler entry stops checking in on time. First-class support for
+**Symfony Scheduler** and the **Laravel scheduler**.
 
 [![CI](https://github.com/alexander-po/cron-monitor-php/actions/workflows/ci.yml/badge.svg)](https://github.com/alexander-po/cron-monitor-php/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
