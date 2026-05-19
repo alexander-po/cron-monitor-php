@@ -8,6 +8,54 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [0.2.1] — 2026-05-19
+
+Patch release that closes a real DX gap surfaced right after 0.2.0
+shipped: the `#[Monitor]` attribute could only carry literal UUIDs,
+but the per-monitor UUID is a write capability secret that belongs in
+env vars, not in source. PHP attribute arguments are limited to
+compile-time constant expressions — `#[Monitor(uuid: getenv('FOO'))]`
+is a parse error, and `'%env(FOO)%'` reaches the resolver as a
+literal string because Symfony's env-placeholder expansion does not
+look inside attribute payloads. Workaround in 0.2.0 was the YAML /
+config-map path; this release closes the gap on the attribute path
+itself.
+
+### Added
+
+- **`#[Monitor(env: 'VAR_NAME')]` attribute form.** Carries the env
+  var *name* instead of its value:
+  ```php
+  #[Monitor(env: 'CRON_MONITOR_REPORTS_NIGHTLY_UUID')]
+  ```
+  Both bridges (Symfony Console subscriber and Laravel scheduler
+  resolver) honour the form. Lookup walks `$_ENV` → `$_SERVER` →
+  `getenv()` in that order to cover CLI, FPM, and container-injected
+  env setups where any one of those can be unpopulated. A missing or
+  empty env var is treated as deliberate suppression — same policy
+  as an empty literal `#[Monitor(uuid: '')]` or an empty YAML map
+  entry.
+- **`Monitor::resolveUuid()` method.** Both bridges now call this
+  single accessor instead of reaching for `$attribute->uuid`
+  directly. The resolution policy lives in the attribute class
+  itself; the bridges only orchestrate.
+
+### Changed
+
+- **`Monitor` attribute constructor enforces an invariant**: exactly
+  one of `uuid:` / `env:` must be provided. Constructing with both
+  or neither throws `\InvalidArgumentException`. The bridges catch
+  that into "no monitoring for this command" so a misuse never
+  breaks the host job; the loud throw at attribute instantiation
+  also gives test suites a chance to surface the mistake.
+
+### Documentation
+
+- README sections for Symfony and Laravel attribute usage now show
+  both forms side-by-side, with the env-sourced form flagged as the
+  prod-recommended pattern and the literal form retained for local
+  dev / one-off scripts.
+
 ## [0.2.0] — 2026-05-19
 
 Headline release: `composer require cron-monitor/php-sdk` is now the only

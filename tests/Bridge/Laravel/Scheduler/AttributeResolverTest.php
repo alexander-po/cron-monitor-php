@@ -6,6 +6,7 @@ namespace CronMonitor\Tests\Bridge\Laravel\Scheduler;
 
 use CronMonitor\Bridge\Laravel\Scheduler\AttributeResolver;
 use CronMonitor\Tests\Fixtures\Laravel\EmptyMonitorScheduledCommand;
+use CronMonitor\Tests\Fixtures\Laravel\EnvMonitoredScheduledCommand;
 use CronMonitor\Tests\Fixtures\Laravel\MonitoredScheduledCommand;
 use CronMonitor\Tests\Fixtures\Laravel\PlainScheduledCommand;
 use Illuminate\Console\Scheduling\CacheEventMutex;
@@ -138,6 +139,71 @@ final class AttributeResolverTest extends TestCase
         );
 
         self::assertNull($uuid);
+    }
+
+    public function test_resolves_uuid_from_env_attribute_form(): void
+    {
+        // The `env:` attribute form is the prod-recommended pattern: the
+        // UUID is a write capability secret that should live in env, not
+        // in git. The resolver must walk the same env-lookup ladder as
+        // the attribute's own `resolveUuid()` method.
+        $envUuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $_ENV[EnvMonitoredScheduledCommand::ENV_VAR] = $envUuid;
+
+        try {
+            $command = new EnvMonitoredScheduledCommand();
+            $event = $this->buildEvent("'/usr/bin/php' 'artisan' reports:env");
+
+            $uuid = AttributeResolver::resolveUuid(
+                $event,
+                $this->locator(['reports:env' => $command]),
+            );
+
+            self::assertSame($envUuid, $uuid);
+        } finally {
+            unset($_ENV[EnvMonitoredScheduledCommand::ENV_VAR]);
+        }
+    }
+
+    public function test_env_attribute_with_missing_env_var_returns_null(): void
+    {
+        // Same attribute, env var not set anywhere — must suppress
+        // silently. Mirrors the dev-environment case where the prod
+        // env var is intentionally absent.
+        unset($_ENV[EnvMonitoredScheduledCommand::ENV_VAR], $_SERVER[EnvMonitoredScheduledCommand::ENV_VAR]);
+        putenv(EnvMonitoredScheduledCommand::ENV_VAR);
+
+        $command = new EnvMonitoredScheduledCommand();
+        $event = $this->buildEvent("'/usr/bin/php' 'artisan' reports:env");
+
+        $uuid = AttributeResolver::resolveUuid(
+            $event,
+            $this->locator(['reports:env' => $command]),
+        );
+
+        self::assertNull($uuid);
+    }
+
+    public function test_env_attribute_with_empty_env_var_returns_null(): void
+    {
+        // Empty-string env var as the explicit "do not monitor in this
+        // environment" signal — same suppression semantics as an empty
+        // literal uuid or empty YAML map entry on the Symfony side.
+        $_ENV[EnvMonitoredScheduledCommand::ENV_VAR] = '';
+
+        try {
+            $command = new EnvMonitoredScheduledCommand();
+            $event = $this->buildEvent("'/usr/bin/php' 'artisan' reports:env");
+
+            $uuid = AttributeResolver::resolveUuid(
+                $event,
+                $this->locator(['reports:env' => $command]),
+            );
+
+            self::assertNull($uuid);
+        } finally {
+            unset($_ENV[EnvMonitoredScheduledCommand::ENV_VAR]);
+        }
     }
 
     public function test_returns_null_when_locator_is_missing(): void
