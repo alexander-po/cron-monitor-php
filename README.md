@@ -21,51 +21,69 @@ switch does. This SDK takes the boilerplate out of wiring it up.
 composer require cron-monitor/php-sdk
 ```
 
-PHP ≥ 8.2.
+PHP ≥ 8.2 with `ext-curl` (the bundled cURL transport uses it; almost every
+PHP install has it on).
 
-- **Symfony bundle path** (`composer require cron-monitor/php-sdk` in a
-  Symfony 7 project): drop-in. The bundle binds PSR-17 factories
-  (via the bundled `nyholm/psr7`) and the PSR-18 client (via
-  `symfony/http-client`'s `Psr18Client`, present in virtually all
-  modern Symfony projects) out of the box. Already wired your own
-  PSR-17 / PSR-18 (Flex recipes, custom factories)? Your bindings
-  override the bundle defaults automatically.
-- **Framework-agnostic path** (plain PHP / Laravel / Slim, etc.): bring
-  your own PSR-18 client + PSR-17 factory and pass them to the
-  `CronMonitorClient` constructor (see Quick start below). The Laravel
-  bridge auto-discovers Guzzle's `HttpFactory` + Guzzle's HTTP client
-  when bound, and falls back to them if you haven't bound a
-  `ClientInterface` / `RequestFactoryInterface` in the container.
+`composer require` is the only step. The SDK ships with its own minimal cURL
+PSR-18 transport plus the PSR-17 factories from the bundled `nyholm/psr7` —
+no Guzzle / symfony/http-client required.
+
+- **Symfony bundle path** — drop-in. The bundle prefers
+  `symfony/http-client`'s `Psr18Client` if present and falls back to the
+  bundled cURL transport otherwise. Your own PSR-17 / PSR-18 bindings
+  always win.
+- **Laravel path** — auto-discovered. The service provider uses bindings
+  from the container when present and falls back to the bundled cURL
+  transport + `nyholm/psr7` factories.
+- **Framework-agnostic path** (plain PHP / Slim / etc.) — use
+  `CronMonitorClient::create()` (see Quick start). Want to plug in
+  Guzzle or symfony/http-client? Construct `CronMonitorClient` directly
+  and pass your PSR-18 client + PSR-17 factory.
 
 ## Quick start (framework-agnostic)
 
 ```php
-use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
-use GuzzleHttp\Client as Guzzle;
-use GuzzleHttp\Psr7\HttpFactory;
 
-$config  = Configuration::withDefaultEndpoint();
-$factory = new HttpFactory();
-$client  = new CronMonitorClient(
-    $config,
-    new Guzzle(['timeout' => $config->timeoutSeconds]),
-    $factory,
-    $factory,
-);
+CronMonitorClient::create()->success('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx');
+```
 
-$client->start('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx');
+Wrap a long-running job:
+
+```php
+use CronMonitor\Client\CronMonitorClient;
+
+$client = CronMonitorClient::create();
+$uuid   = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+
+$client->start($uuid);
 try {
     runMyImportantJob();
-    $client->success('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx');
+    $client->success($uuid);
 } catch (\Throwable $e) {
-    $client->fail('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx', $e->getMessage());
+    $client->fail($uuid, $e->getMessage());
     throw $e;
 }
 ```
 
 The client **never throws** on network or HTTP errors — a broken
 cron-monitor backend will not break your job.
+
+For a custom endpoint (staging / preview), tighter timeout, or API key:
+
+```php
+use CronMonitor\Client\Configuration;
+use CronMonitor\Client\CronMonitorClient;
+
+$client = CronMonitorClient::create(
+    new Configuration(
+        endpoint:       'https://staging.cronheart.com',
+        timeoutSeconds: 3.0,
+        retries:        2,
+        apiKey:         getenv('CRON_MONITOR_API_KEY') ?: null,
+    ),
+);
+```
 
 ## Symfony Scheduler integration
 
