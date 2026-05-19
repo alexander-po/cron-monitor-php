@@ -8,6 +8,85 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [0.2.0] — 2026-05-19
+
+Headline release: `composer require cron-monitor/php-sdk` is now the only
+step needed to wire up cron-monitor in plain PHP, Symfony, and Laravel
+projects. The SDK ships its own minimal HTTP transport, and the new
+`#[Monitor]` attribute lets the UUID live next to the command class
+instead of being duplicated in YAML / config.
+
+### Added
+
+- **Built-in cURL PSR-18 transport** — `CronMonitor\Client\CurlPsr18Client`
+  (~95 LOC over `ext-curl`) plus a static factory
+  `CronMonitorClient::create(?Configuration, ?LoggerInterface)`. Plain
+  PHP / Slim users can now go from `composer require` to a working
+  ping in three lines:
+  ```php
+  use CronMonitor\Client\CronMonitorClient;
+  CronMonitorClient::create()->success('xxxxxxxx-…');
+  ```
+  Failures from libcurl are wrapped in a new
+  `CronMonitor\Client\CurlException` (implements PSR-18
+  `NetworkExceptionInterface`), which the existing client catches into
+  `PingResult::failed(...)` — the no-throw contract is preserved
+  end-to-end.
+- **`#[Monitor(uuid: '...')]` attribute** at the package-root namespace
+  `CronMonitor\Attribute\Monitor`. Honoured by:
+  - The Symfony console subscriber — declare the UUID on the `Command`
+    class instead of mapping the command name in
+    `cron_monitor.commands:` YAML.
+  - The Laravel scheduler `->monitor()` macro — calling `->monitor()`
+    with no argument resolves the UUID from the attribute on the
+    Artisan command class behind the event.
+  Precedence: an explicit YAML map (Symfony) or string argument
+  (Laravel) always wins over the attribute. An empty string is
+  treated as deliberate suppression so per-environment overrides
+  (`%env(MY_UUID)%` blank in dev) continue to work.
+
+### Changed
+
+- **Laravel service provider's PSR-18 / PSR-17 fallback** now uses the
+  bundled cURL transport + `nyholm/psr7` instead of Guzzle. Users with
+  a `ClientInterface` / `RequestFactoryInterface` / `StreamFactoryInterface`
+  already bound in the container still win — only the unbound path
+  changes. **BC note:** Laravel installs that relied on the provider
+  silently constructing a `GuzzleHttp\Client` will now get the cURL
+  transport instead; the wire behaviour is identical for the ping
+  shapes the SDK sends. Guzzle is no longer required and can be
+  removed from `require` if it was only ever pulled in for this SDK.
+- **`composer.json` `suggest` reframed.** Guzzle and `symfony/http-client`
+  are now described as optional accelerators (for connection pooling
+  or an existing HTTP stack), not as recommended dependencies — the
+  bundled cURL transport handles the default case.
+- **`MonitorConsoleSubscriber::resolveUuid()` signature** now accepts the
+  `Command` instance instead of just its name, so it can read
+  `#[Monitor]` off the class as a fallback to the YAML map.
+  **BC note:** this is a `private` method — direct callers do not
+  exist outside the bundle, but anyone extending the subscriber via
+  subclass should update their override.
+- **`Event::monitor()` macro signature** widened to
+  `?string $monitorUuid = null`. Existing `->monitor('uuid')` calls
+  continue to work unchanged; the new no-argument form falls back to
+  the attribute on the command class. Calling `->monitor(null)` is no
+  longer a `TypeError` — it becomes the attribute-fallback path.
+- **User-Agent header** bumped from `cron-monitor-php-sdk/0.1` to
+  `cron-monitor-php-sdk/0.2` so backend telemetry can distinguish
+  SDK versions.
+- **PHP version floor** stays at 8.2 (unchanged from 0.1.x). The new
+  cURL transport requires `ext-curl` to be loaded — almost every PHP
+  install has it on, but the README now flags it explicitly.
+
+### Documentation
+
+- README rewritten around the zero-dep flow. New "What's in the box"
+  section, Packagist version / monthly downloads / PHP requirement
+  badges, and both attribute call shapes (Symfony + Laravel) shown
+  side-by-side with the precedence rule called out.
+- `composer.json` keywords gained `artisan`, `console`, and `psr-18`
+  for Packagist search discoverability.
+
 ## [0.1.3] — 2026-05-14
 
 ### Changed
