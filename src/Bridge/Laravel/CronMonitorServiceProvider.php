@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace CronMonitor\Bridge\Laravel;
 
 use CronMonitor\Bridge\Laravel\Console\SyncCommand;
+use CronMonitor\Bridge\Laravel\Scheduler\AttributeResolver;
 use CronMonitor\Bridge\Laravel\Scheduler\EventMonitor;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Client\CurlPsr18Client;
+use Illuminate\Console\Application as Artisan;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Console\Kernel as ConsoleKernelContract;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\ServiceProvider;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -19,6 +22,7 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Symfony\Component\Console\Command\Command as SymfonyCommand;
 
 /**
  * Laravel auto-discovered service provider.
@@ -105,12 +109,102 @@ final class CronMonitorServiceProvider extends ServiceProvider
         // The macro hooks `before` / `onSuccess` / `onFailure` which Laravel
         // itself wraps around the closure that runs the command, so the
         // pings always fire on the same boundary as the job execution.
-        Event::macro('monitor', function (string $monitorUuid): Event {
+        //
+        // When called without a UUID (`->monitor()`), the macro falls back
+        // to reading the `#[Monitor]` attribute on the Artisan command
+        // class behind the event — keeping the UUID next to the code
+        // instead of duplicating it at the scheduler call site. An empty
+        // string is treated as explicit suppression so per-environment
+        // overrides (`->monitor(env('MY_UUID', ''))`) work without
+        // throwing.
+        Event::macro('monitor', function (?string $monitorUuid = null): Event {
             /** @var Event $this */
+            if (null === $monitorUuid) {
+                $monitorUuid = AttributeResolver::resolveUuid(
+                    $this,
+                    CronMonitorServiceProvider::artisanCommandLocator(),
+                );
+            }
+
+            if (null === $monitorUuid || '' === $monitorUuid) {
+                // Nothing to install. Returning $this preserves fluent
+                // chaining so the rest of the user's scheduler config
+                // (`->withoutOverlapping()`, `->runInBackground()`, etc.)
+                // still applies.
+                return $this;
+            }
+
             $client = app(CronMonitorClient::class);
 
             return EventMonitor::install($this, $client, $monitorUuid);
         });
+    }
+
+    /**
+     * Build the command-name → Command lookup used by the `monitor()`
+     * macro's attribute fallback. The closure is built fresh on every
+     * macro call because the kernel binding may change during the
+     * application lifecycle (most notably in tests). All failure modes
+     * — kernel not bound, kernel without `getArtisan()`, artisan unable
+     * to resolve the name — collapse to `null` so the macro can short-
+     * circuit without breaking the host job.
+     *
+     * Exposed as a public static helper so the macro closure (which
+     * Laravel rebinds onto `Event`) can call it without dragging extra
+     * `use` references through `$this`.
+     */
+    public static function artisanCommandLocator(): \Closure
+    {
+        return static function (string $commandName): ?SymfonyCommand {
+            if (!\function_exists('app')) {
+                return null;
+            }
+            $container = app();
+            if (!$container->bound(ConsoleKernelContract::class)) {
+                return null;
+            }
+            $kernel = $container->make(ConsoleKernelContract::class);
+            // `Container::make()` is typed loosely — narrow to an object
+            // before `method_exists` so PHPStan can prove the dynamic call
+            // is safe. `getArtisan()` is on the concrete
+            // `Illuminate\Foundation\Console\Kernel`, NOT on the
+            // contract, hence the duck-type rather than `instanceof`.
+            if (!\is_object($kernel) || !method_exists($kernel, 'getArtisan')) {
+                return null;
+            }
+            $artisan = $kernel->getArtisan();
+            if (!$artisan instanceof Artisan) {
+                return null;
+            }
+            try {
+                return $artisan->find($commandName);
+            } catch (\Throwable $error) {
+                // `find()` throws `CommandNotFoundException` for unknown
+                // names; that — like any other failure here — must not
+                // surface as a fatal at scheduler-binding time. We do
+                // log it (best-effort) so a misconfigured kernel or a
+                // misspelled scheduled command name leaves an audit
+                // trail instead of silently disabling monitoring.
+                if ($container->bound(LoggerInterface::class)) {
+                    try {
+                        $container->make(LoggerInterface::class)->warning(
+                            'cron-monitor: Artisan kernel could not resolve scheduled command for #[Monitor] attribute lookup',
+                            [
+                                'command' => $commandName,
+                                'exception' => $error::class,
+                                'message' => $error->getMessage(),
+                            ],
+                        );
+                    } catch (\Throwable) {
+                        // Logger itself blew up — we are out of options.
+                        // The original safety contract still holds: no
+                        // exception escapes this closure.
+                    }
+                }
+
+                return null;
+            }
+        };
     }
 
     /**
