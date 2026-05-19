@@ -7,6 +7,7 @@ namespace CronMonitor\Tests\Client;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Tests\Support\InMemoryLogger;
+use CronMonitor\Tests\Support\LocalHttpServer;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
@@ -204,5 +205,31 @@ final class CronMonitorClientTest extends TestCase
         /** @var RequestInterface $request */
         $request = $http->requests[0];
         self::assertSame('Bearer sk_test_123', $request->getHeaderLine('Authorization'));
+    }
+
+    public function test_create_factory_wires_a_working_client_end_to_end(): void
+    {
+        // The zero-config factory ships with the built-in cURL transport and
+        // nyholm/psr7 factories — so this test exercises the *whole* default
+        // pipeline against a real HTTP server, not mocks. It is the smoke
+        // test for "composer require + 3 lines = a successful ping".
+        $server = LocalHttpServer::start();
+        if (null === $server) {
+            self::markTestSkipped('Could not start the built-in PHP HTTP server.');
+        }
+
+        try {
+            $client = CronMonitorClient::create(
+                new Configuration($server->baseUrl(), allowInsecureEndpoint: true),
+            );
+
+            $result = $client->success(self::UUID, 'ok');
+
+            self::assertTrue($result->delivered);
+            self::assertSame(200, $result->statusCode);
+            self::assertSame(1, $result->attempts);
+        } finally {
+            $server->stop();
+        }
     }
 }

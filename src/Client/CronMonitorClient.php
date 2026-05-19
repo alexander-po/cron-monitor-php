@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Client;
 
+use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -45,6 +46,32 @@ final class CronMonitorClient
         private readonly StreamFactoryInterface $streamFactory,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
+    }
+
+    /**
+     * Zero-config factory for the common case: SaaS endpoint, no API key, and
+     * a built-in cURL transport so the caller does not have to wire up
+     * Guzzle / symfony/http-client to send a single ping.
+     *
+     *     CronMonitorClient::create()->success($uuid);
+     *
+     * Pass a `Configuration` for self-hosted endpoints, a custom timeout, or
+     * an API key. PSR-17 factories come from the bundled `nyholm/psr7`.
+     */
+    public static function create(
+        ?Configuration $configuration = null,
+        ?LoggerInterface $logger = null,
+    ): self {
+        $configuration ??= Configuration::withDefaultEndpoint();
+        $factory = new Psr17Factory();
+
+        return new self(
+            $configuration,
+            new CurlPsr18Client($factory, $factory, $configuration->timeoutSeconds),
+            $factory,
+            $factory,
+            $logger ?? new NullLogger(),
+        );
     }
 
     /**
