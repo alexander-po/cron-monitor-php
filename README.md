@@ -171,18 +171,47 @@ The service provider is auto-discovered. Publish the config:
 php artisan vendor:publish --tag=cron-monitor-config
 ```
 
-Then in `routes/console.php`:
+Then in `routes/console.php`, either pass the UUID at the call site
+**or** declare it on the command class and call `->monitor()` without
+arguments:
 
 ```php
 use Illuminate\Support\Facades\Schedule;
 
+// Explicit UUID
 Schedule::command('reports:nightly')
     ->dailyAt('02:00')
     ->monitor('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx');
+
+// UUID lives on the command class
+use App\Console\Commands\GenerateNightlyReportCommand;
+
+Schedule::command(GenerateNightlyReportCommand::class)
+    ->dailyAt('02:00')
+    ->monitor();
 ```
 
-The `->monitor(...)` macro hooks `before` / `onSuccess` / `onFailure` so
-you get start/success/fail pings on the same boundary as the job execution.
+For the no-arg form, the macro reads the `#[Monitor]` attribute on the
+Artisan command class behind the scheduled event:
+
+```php
+use CronMonitor\Attribute\Monitor;
+use Illuminate\Console\Command;
+
+#[Monitor(uuid: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx')]
+final class GenerateNightlyReportCommand extends Command
+{
+    protected $signature = 'reports:nightly';
+
+    // ...
+}
+```
+
+Precedence rule: an explicit string argument to `->monitor(...)` always
+wins over the attribute, and an empty string (`->monitor(env('MY_UUID', ''))`)
+is treated as explicit suppression for the current environment. The
+`->monitor(...)` macro hooks `before` / `onSuccess` / `onFailure` so you
+get start/success/fail pings on the same boundary as the job execution.
 
 `php artisan cron-monitor:sync` lists every scheduled command and emits a
 `config/cron-monitor.php` snippet.
