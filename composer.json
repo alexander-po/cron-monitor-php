@@ -9,8 +9,11 @@
         "scheduler",
         "symfony",
         "laravel",
+        "artisan",
+        "console",
         "healthcheck",
-        "deadman-switch"
+        "deadman-switch",
+        "psr-18"
     ],
     "homepage": "https://cronheart.com",
     "support": {
@@ -45,8 +48,9 @@
     "suggest": {
         "symfony/framework-bundle": "Required to use the Symfony bundle bridge (^6.4 || ^7.0).",
         "symfony/scheduler": "Required to auto-register Symfony Scheduler runs as monitors.",
+        "symfony/http-client": "Optional PSR-18 client; the Symfony bundle prefers it if present (the SDK ships a built-in cURL transport otherwise).",
         "illuminate/console": "Required to use the Laravel scheduler macros and sync command.",
-        "guzzlehttp/guzzle": "Recommended PSR-18 HTTP client. Any PSR-18 client works."
+        "guzzlehttp/guzzle": "Optional PSR-18 client for connection pooling or advanced HTTP needs. Not required — the SDK ships a built-in cURL transport."
     },
     "autoload": {
         "psr-4": {
