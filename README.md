@@ -126,8 +126,11 @@ config above.
 
 If your cron entry is a console command rather than a Scheduler run — e.g.
 `* * * * * php bin/console app:reports:nightly` straight out of crontab —
-map the command name and the bundle wraps every invocation in
-start/success/fail pings via a kernel event subscriber:
+either map the command name in YAML **or** declare the monitor UUID right
+on the command class, and the bundle wraps every invocation in
+start/success/fail pings via a kernel event subscriber.
+
+YAML map (good for "configuration as deploy artefact" workflows):
 
 ```yaml
 cron_monitor:
@@ -135,7 +138,27 @@ cron_monitor:
         'app:reports:nightly': 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
 ```
 
-No code changes inside the command. A non-zero exit fires `fail`; an
+Class attribute (good for "the UUID lives next to the code"):
+
+```php
+use CronMonitor\Attribute\Monitor;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Command\Command;
+
+#[AsCommand(name: 'app:reports:nightly')]
+#[Monitor(uuid: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx')]
+final class GenerateNightlyReportCommand extends Command
+{
+    // ...
+}
+```
+
+Both sources are honoured, and **YAML wins on conflict** — so you can keep
+the prod UUID on the class and override it per environment in YAML (e.g.
+`'app:reports:nightly': '%env(MY_UUID)%'` with `MY_UUID` blank in dev to
+suppress monitoring without removing the attribute).
+
+No code changes inside the command body. A non-zero exit fires `fail`; an
 uncaught throwable fires `fail` with the exception class, message, and
 file:line in the body so the cron-monitor dashboard shows the immediate
 cause without you tailing logs.
