@@ -307,6 +307,71 @@ fi
 Set `CRON_MONITOR_ENDPOINT` and `CRON_MONITOR_API_KEY` in the environment
 to avoid repeating the flags.
 
+## Managing monitors via the API
+
+Everything above is the **ping** path — anonymous, never throws, never
+breaks your job. Since 1.0.0 the SDK also ships an **authenticated
+management client** for listing and creating monitors from your own
+account, `CronMonitor\Api\MonitorApiClient`.
+
+This client is the deliberate opposite of the ping client: it **throws**
+typed exceptions, because you call it from admin screens or CLI tooling
+where you want to know — and react — when something fails.
+
+Authenticate with a Personal Access Token (`cmk_…`) created in the
+cronheart.com dashboard (Settings → API Tokens). API access requires a
+Starter plan or higher. The token rides on `Configuration::apiKey`:
+
+```php
+use CronMonitor\Api\Dto\CreateMonitorRequest;
+use CronMonitor\Api\Dto\ScheduleKind;
+use CronMonitor\Api\Exception\ApiException;
+use CronMonitor\Api\Exception\RateLimitException;
+use CronMonitor\Api\Exception\ValidationException;
+use CronMonitor\Api\MonitorApiClient;
+use CronMonitor\Client\Configuration;
+
+$api = MonitorApiClient::create(
+    Configuration::withDefaultEndpoint(apiKey: getenv('CRON_MONITOR_API_KEY') ?: null),
+);
+
+// List your monitors (paginated).
+$page = $api->listMonitors(offset: 0, limit: 50);
+foreach ($page->data as $monitor) {
+    printf("%s  %s  %s\n", $monitor->uuid, $monitor->status->value, $monitor->name);
+}
+
+// Or walk every page lazily.
+foreach ($api->allMonitors() as $monitor) {
+    // ...
+}
+
+// Create one.
+try {
+    $monitor = $api->createMonitor(new CreateMonitorRequest(
+        name: 'Nightly report',
+        scheduleKind: ScheduleKind::Cron,
+        scheduleExpr: '0 2 * * *',
+        tz: 'UTC',
+        graceSeconds: 120,
+    ));
+    echo $monitor->pingUrl;
+} catch (ValidationException $e) {
+    foreach ($e->errors as $field => $message) {
+        echo "$field: $message\n";
+    }
+} catch (RateLimitException $e) {
+    echo "Slow down; retry after {$e->retryAfter}s\n";
+} catch (ApiException $e) {
+    // Catch the base type for any other API failure (auth, plan, network…).
+    error_log($e->getMessage());
+}
+```
+
+In Symfony the client is autowired (`MonitorApiClient`); in Laravel it
+is a container singleton (`app(MonitorApiClient::class)`). Both read the
+token from the same `api_key` config you already set.
+
 ## Configuration knobs
 
 | Setting                    | Default                  | Notes |
@@ -314,7 +379,7 @@ to avoid repeating the flags.
 | `endpoint`                 | `https://cronheart.com`  | Self-hosted: point at your install. |
 | `timeout_seconds`          | `5.0`                    | Per-request, low by design. |
 | `retries`                  | `1`                      | Pings are idempotent server-side. |
-| `api_key`                  | `null`                   | Reserved for future authenticated routes. |
+| `api_key`                  | `null`                   | Personal Access Token (`cmk_…`) for the management API; not needed for pings. |
 | `allow_insecure_endpoint`  | `false`                  | Required for `http://` endpoints. |
 
 ## Security
@@ -326,6 +391,11 @@ to avoid repeating the flags.
   URL — no path traversal via the action segment.
 - The `Authorization: Bearer <api_key>` header is attached only when an
   API key is configured; nothing is sent for anonymous installs.
+- **The API token (`api_key`) is a full account credential**, far more
+  powerful than a per-monitor UUID — it can list and create every
+  monitor on the account. Keep it in an environment variable / secrets
+  store, never commit it, and never log it. Ping-only installs do not
+  need it at all; leave it unset.
 - **`fail` pings include exception text and a host file path.** When a
   monitored handler throws, the SDK sends the exception class name,
   `getMessage()`, and `file:line` of the throw site to the cron-monitor
