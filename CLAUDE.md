@@ -133,9 +133,16 @@ Don't add these without explicit design discussion:
   ping is synchronous against a 5-second timeout. Adding async means
   rethinking the retry budget, ordering guarantees, and resource
   cleanup on a host job that's about to exit.
-- Server-side polling, monitor management (create / delete / pause).
-  Reserved for a separate authenticated client surface; the public
-  `/ping/<uuid>` flow is anonymous-via-UUID-as-credential by design.
+- Server-side polling. The public `/ping/<uuid>` flow is
+  anonymous-via-UUID-as-credential by design; there is no long-poll or
+  webhook-subscription surface in the SDK.
+- Monitor *mutation* beyond create: update / delete / pause / resume.
+  Monitor management landed in 1.0.0 as the separate authenticated
+  `CronMonitor\Api\MonitorApiClient` (list / get / create monitors,
+  list channels — see README "Managing monitors via the API"), but the
+  mutating verbs and `createChannel` are deliberately deferred to a
+  later minor. That client THROWS (admin / CLI context); keep it
+  strictly separate from the no-throw ping client.
 - Bundled framework version pins. Composer constraints stay loose
   (`^6.4 || ^7.0` for Symfony, `^10.0 || ^11.0` for Laravel); the
   user's app pins.

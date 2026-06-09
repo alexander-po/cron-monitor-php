@@ -26,6 +26,38 @@ foreach ($_SERVER as $key => $value) {
     }
 }
 
+$path = parse_url($uri, \PHP_URL_PATH);
+
+// Canned management-API route so MonitorApiClient's create()-factory
+// round-trip can be smoke-tested end-to-end against the real cURL
+// transport. Everything else falls through to the request-echo used by
+// CurlPsr18ClientTest, so adding this branch leaves that test untouched.
+if ('/api/v1/monitors' === $path) {
+    header('Content-Type: application/json');
+    http_response_code(200);
+    echo json_encode([
+        'data' => [[
+            'uuid' => '550e8400-e29b-41d4-a716-446655440000',
+            'name' => 'Smoke monitor',
+            'schedule_kind' => 'interval',
+            'schedule_expr' => '300',
+            'tz' => 'UTC',
+            'grace_seconds' => 60,
+            'status' => 'new',
+            'next_expected_at' => null,
+            'last_ping_at' => null,
+            'created_at' => '2026-01-01T00:00:00+00:00',
+            'ping_url' => 'http://127.0.0.1/ping/550e8400-e29b-41d4-a716-446655440000',
+            'badge_url' => 'http://127.0.0.1/badge/550e8400-e29b-41d4-a716-446655440000.svg',
+        ]],
+        'total' => 1,
+        'limit' => 50,
+        'offset' => 0,
+    ], \JSON_THROW_ON_ERROR);
+
+    return;
+}
+
 $status = isset($_GET['status']) ? (int) $_GET['status'] : 200;
 http_response_code($status);
 

@@ -34,10 +34,13 @@ final class Configuration
         public readonly float $timeoutSeconds = self::DEFAULT_TIMEOUT_SECONDS,
         public readonly int $retries = self::DEFAULT_RETRIES,
         /**
-         * Optional per-instance API key. Currently unused by the public ping
-         * endpoint (the per-monitor UUID is the only credential), but kept
-         * in the contract so that future authenticated routes (sync, fetch
-         * monitor metadata) do not require a breaking config change.
+         * Personal Access Token (`cmk_…`) for the authenticated management
+         * API, carried as `Authorization: Bearer` by
+         * {@see \CronMonitor\Api\MonitorApiClient} (list / fetch / create
+         * monitors). The public `/ping/<uuid>` flow does not require it —
+         * the per-monitor UUID is the only credential there — so anonymous
+         * ping-only installs leave this null. Create a token in the
+         * cronheart.com dashboard (Settings → API Tokens).
          */
         public readonly ?string $apiKey = null,
         /**

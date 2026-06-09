@@ -8,6 +8,75 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.0.0] — 2026-06-09
+
+First stable release. The ping client and its bridges have been steady
+across the 0.1 / 0.2 line; 1.0.0 commits to Semantic Versioning for the
+public surface and adds the authenticated **management-API client** that
+the `Configuration::apiKey` field was reserved for since 0.1.0.
+
+This is a feature release with **no breaking changes** — code written
+against 0.2.x keeps working unchanged. The major bump signals the BC
+commitment, not a migration.
+
+### Added
+
+- **`CronMonitor\Api\MonitorApiClient`** — authenticated client for the
+  cronheart.com management API (`/api/v1/...`):
+  - `listMonitors(offset, limit)`, `getMonitor(uuid)`,
+    `createMonitor(CreateMonitorRequest)`,
+    `allMonitors()` (a generator that walks every page lazily), and
+    `listChannels()`.
+  - Zero-config `MonitorApiClient::create()` mirroring the ping
+    client's factory (bundled cURL transport + nyholm PSR-17).
+  - Authentication via the Personal Access Token (`cmk_…`) carried in
+    `Configuration::apiKey`, sent as `Authorization: Bearer`. Create a
+    token in the cronheart.com dashboard (Settings → API Tokens). API
+    access requires a Starter plan or higher.
+- **Immutable DTOs** under `CronMonitor\Api\Dto`: `Monitor`,
+  `MonitorPage`, `Channel`, `ChannelPage`, `CreateMonitorRequest`, plus
+  the `ScheduleKind` and `MonitorStatus` backed enums. Timestamps are
+  parsed into `\DateTimeImmutable`.
+- **Typed exception hierarchy** under `CronMonitor\Api\Exception`:
+  `ApiException` (abstract base) with `AuthenticationException` (401),
+  `PlanRestrictionException` (402, carries `upgradeUrl`),
+  `ForbiddenException` (403), `NotFoundException` (404),
+  `ConflictException` (409), `ValidationException` (422, carries field
+  `errors`), `RateLimitException` (429, carries `retryAfter`),
+  `UnexpectedResponseException` (other 4xx/5xx) and
+  `ApiTransportException` (network / decode). **Unlike the ping client,
+  the API client throws** — it runs in admin / CLI contexts where the
+  caller wants to know about failures.
+- **Bridge wiring**: `MonitorApiClient` is registered as a public,
+  injectable service in the Symfony bundle and bound as a singleton in
+  the Laravel service provider, reusing the same transport /
+  `Configuration` (incl. `api_key`) as the ping client.
+
+### Changed
+
+- **`Configuration::apiKey` is now active.** Previously documented as
+  "reserved for future authenticated routes", it now carries the PAT
+  the management API authenticates with. No signature change — the
+  field, the Symfony `api_key:` key, the Laravel `api_key` config and
+  the `CRON_MONITOR_API_KEY` env var all keep their names. The ping
+  flow still does not require it.
+- Both clients report `User-Agent: cron-monitor-php-sdk/1.0`.
+
+### Fixed
+
+- Corrected the copyright holder name in `LICENSE`.
+
+### Notes
+
+- The ping client (`CronMonitor\Client\CronMonitorClient`) and its
+  bundled cURL transport are untouched: their no-throw,
+  never-break-the-host-job contract is unchanged.
+- `CronMonitor\Api\Internal\*` is marked `@internal` and is explicitly
+  **excluded** from the SemVer surface.
+- Still not shipped (by design): `createChannel`, monitor
+  update / delete / pause, and the API-backed `cron-monitor:sync`
+  reconciliation command — candidates for 1.1.
+
 ## [0.2.1] — 2026-05-19
 
 Patch release that closes a real DX gap surfaced right after 0.2.0

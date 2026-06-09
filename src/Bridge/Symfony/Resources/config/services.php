@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Bridge\Symfony\Console\MonitorConsoleSubscriber;
 use CronMonitor\Bridge\Symfony\Console\SyncCommand;
 use CronMonitor\Bridge\Symfony\Messenger\MonitorPingMiddleware;
@@ -78,6 +79,21 @@ return static function (ContainerConfigurator $container): void {
             service(LoggerInterface::class)->ignoreOnInvalid(),
         ])
         ->public(); // public so user code can grab it via `$container->get(...)`
+
+    // Authenticated management-API client. Shares the exact same transport,
+    // PSR-17 factories and Configuration as the ping client — the API token
+    // rides on Configuration::apiKey (the `api_key:` bundle config key,
+    // defaulting to env(CRON_MONITOR_API_KEY)). Public so user code /
+    // controllers can grab it to list or create monitors.
+    $services->set(MonitorApiClient::class)
+        ->args([
+            service(Configuration::class),
+            service(ClientInterface::class),
+            service(RequestFactoryInterface::class),
+            service(StreamFactoryInterface::class),
+            service(LoggerInterface::class)->ignoreOnInvalid(),
+        ])
+        ->public();
 
     $services->set(MonitorPingMiddleware::class)
         ->args([
