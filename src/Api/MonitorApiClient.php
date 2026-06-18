@@ -8,6 +8,8 @@ use CronMonitor\Api\Dto\ChannelPage;
 use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\MonitorPage;
+use CronMonitor\Api\Dto\SnoozeDuration;
+use CronMonitor\Api\Dto\UpdateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Internal\ExceptionFactory;
@@ -129,9 +131,7 @@ final class MonitorApiClient
      */
     public function getMonitor(string $uuid): Monitor
     {
-        if (1 !== preg_match(self::UUID_PATTERN, $uuid)) {
-            throw new \InvalidArgumentException(\sprintf('%s is not a valid monitor UUID.', $uuid));
-        }
+        $this->assertUuid($uuid);
 
         $payload = $this->requestJson('GET', '/monitors/'.$uuid, null, true);
 
@@ -193,6 +193,109 @@ final class MonitorApiClient
     }
 
     /**
+     * Apply a partial update (`PATCH`) and return the updated monitor. The
+     * UUID is validated locally and an empty patch is rejected before any
+     * HTTP, mirroring {@see getMonitor}'s fail-fast. Retried: re-applying the
+     * same field values is idempotent, so a replay after a dropped response
+     * is safe.
+     *
+     * @throws ApiException
+     */
+    public function updateMonitor(string $uuid, UpdateMonitorRequest $request): Monitor
+    {
+        $this->assertUuid($uuid);
+        if ($request->isEmpty()) {
+            throw new \InvalidArgumentException('updateMonitor needs at least one field to change.');
+        }
+
+        $payload = $this->requestJson('PATCH', '/monitors/'.$uuid, $request->toArray(), true);
+
+        return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
+    }
+
+    /**
+     * Delete a monitor (the backend answers `204 No Content`). Retried:
+     * deleting is idempotent in effect — the end state is "gone" either way.
+     * The only observable difference on a replay after the server already
+     * processed the first attempt is a `404` (surfaced as
+     * {@see Exception\NotFoundException}) instead of a silent
+     * success.
+     *
+     * @throws ApiException
+     */
+    public function deleteMonitor(string $uuid): void
+    {
+        $this->assertUuid($uuid);
+
+        $this->requestNoContent('DELETE', '/monitors/'.$uuid, null, true);
+    }
+
+    /**
+     * Pause a monitor (no alerts while paused) and return it. Retried:
+     * pausing an already-paused monitor is a no-op, so a replay is safe.
+     *
+     * @throws ApiException
+     */
+    public function pauseMonitor(string $uuid): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/pause', null);
+    }
+
+    /**
+     * Resume a paused monitor and return it. Retried: resuming an already-
+     * running monitor is a no-op, so a replay is safe.
+     *
+     * @throws ApiException
+     */
+    public function resumeMonitor(string $uuid): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/resume', null);
+    }
+
+    /**
+     * Snooze a monitor for a bounded duration and return it. Retried:
+     * re-snoozing extends from "now" again, which is idempotent enough that a
+     * replay after a dropped response is safe (it re-applies the same window).
+     *
+     * @throws ApiException
+     */
+    public function snoozeMonitor(string $uuid, SnoozeDuration $duration): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/snooze', ['duration' => $duration->value]);
+    }
+
+    /**
+     * Clear an active snooze and return the monitor. Retried: unsnoozing an
+     * un-snoozed monitor is a no-op, so a replay is safe.
+     *
+     * @throws ApiException
+     */
+    public function unsnoozeMonitor(string $uuid): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/unsnooze', null);
+    }
+
+    /**
+     * Rotate the monitor's UUID, returning the monitor with its new UUID.
+     *
+     * **Never retried.** Rotation instantly invalidates the old ping URL with
+     * no grace window and is not idempotent: a blind replay would either
+     * rotate a second time or `422` because the echoed confirmation no longer
+     * matches. The backend requires the caller to echo the current UUID as
+     * `confirm`, which this method supplies.
+     *
+     * @throws ApiException
+     */
+    public function rotateMonitorUuid(string $uuid): Monitor
+    {
+        $this->assertUuid($uuid);
+
+        $payload = $this->requestJson('POST', '/monitors/'.$uuid.'/rotate-uuid', ['confirm' => $uuid], false);
+
+        return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
+    }
+
+    /**
      * List the caller's notification channels (the channel ids feed
      * {@see CreateMonitorRequest::$channelIds}).
      *
@@ -203,6 +306,36 @@ final class MonitorApiClient
         $payload = $this->requestJson('GET', '/channels', null, true);
 
         return $this->hydrate(static fn (): ChannelPage => ChannelPage::fromArray($payload));
+    }
+
+    /**
+     * Shared path for the POST status transitions (pause / resume / snooze /
+     * unsnooze): validate the UUID locally, POST to the sub-resource, and
+     * hydrate the monitor the backend returns. All are retryable — each is an
+     * idempotent transition whose replay is a no-op.
+     *
+     * @param array<string, mixed>|null $body
+     *
+     * @throws ApiException
+     */
+    private function transitionMonitor(string $uuid, string $subPath, ?array $body): Monitor
+    {
+        $this->assertUuid($uuid);
+
+        $payload = $this->requestJson('POST', '/monitors/'.$uuid.$subPath, $body, true);
+
+        return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
+    }
+
+    /**
+     * Validate a monitor UUID locally before any HTTP request, giving a
+     * friendly error instead of a server `404`.
+     */
+    private function assertUuid(string $uuid): void
+    {
+        if (1 !== preg_match(self::UUID_PATTERN, $uuid)) {
+            throw new \InvalidArgumentException(\sprintf('%s is not a valid monitor UUID.', $uuid));
+        }
     }
 
     /**
@@ -237,6 +370,27 @@ final class MonitorApiClient
 
         /** @var array<string, mixed> $decoded */
         return $decoded;
+    }
+
+    /**
+     * Send a request whose success carries no body — a `DELETE`'s `204 No
+     * Content`. Mirrors {@see requestJson}'s non-2xx → {@see ExceptionFactory}
+     * mapping but neither requires nor decodes a JSON body, so requestJson's
+     * "must be a JSON object" invariant stays intact for the endpoints that do
+     * return one.
+     *
+     * @param array<string, mixed>|null $body
+     *
+     * @throws ApiException
+     */
+    private function requestNoContent(string $method, string $path, ?array $body, bool $retryable): void
+    {
+        $response = $this->send($this->buildRequest($method, $path, $body), $retryable);
+        $status = $response->getStatusCode();
+
+        if ($status < 200 || $status >= 300) {
+            throw ExceptionFactory::fromResponse($status, ProblemDetails::parse((string) $response->getBody(), $status), $this->retryAfterSeconds($response));
+        }
     }
 
     /**
