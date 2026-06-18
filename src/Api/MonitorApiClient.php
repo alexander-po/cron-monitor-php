@@ -148,14 +148,22 @@ final class MonitorApiClient
     }
 
     /**
-     * Create a monitor. Never retried — creates are not idempotent and the
-     * wire contract has no idempotency key, so a retry risks a duplicate.
+     * Create a monitor.
+     *
+     * By default this is **not retried** — a blind replay of a create risks a
+     * duplicate. Supplying an `$idempotencyKey` flips that: the backend dedups
+     * a replay carrying the same key and identical body (returning the original
+     * result), so the create becomes safe to retry, and this method enables the
+     * retry budget when a key is given. Reuse the SAME key for the logical
+     * operation; a different body under the same key is a `409`.
      *
      * @throws ApiException
      */
-    public function createMonitor(CreateMonitorRequest $request): Monitor
+    public function createMonitor(CreateMonitorRequest $request, ?string $idempotencyKey = null): Monitor
     {
-        $payload = $this->requestJson('POST', '/monitors', $request->toArray(), false);
+        [$headers, $retryable] = $this->idempotency($idempotencyKey);
+
+        $payload = $this->requestJson('POST', '/monitors', $request->toArray(), $retryable, $headers);
 
         return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
     }
@@ -430,14 +438,20 @@ final class MonitorApiClient
     }
 
     /**
-     * Create a notification channel. Never retried — creates are not
-     * idempotent, so a blind replay risks a duplicate channel.
+     * Create a notification channel.
+     *
+     * Like {@see createMonitor}, this is **not retried** by default (a replay
+     * risks a duplicate channel) unless an `$idempotencyKey` is supplied, in
+     * which case the backend dedups the replay and the create becomes
+     * retryable.
      *
      * @throws ApiException
      */
-    public function createChannel(CreateChannelRequest $request): Channel
+    public function createChannel(CreateChannelRequest $request, ?string $idempotencyKey = null): Channel
     {
-        $payload = $this->requestJson('POST', '/channels', $request->toArray(), false);
+        [$headers, $retryable] = $this->idempotency($idempotencyKey);
+
+        $payload = $this->requestJson('POST', '/channels', $request->toArray(), $retryable, $headers);
 
         return $this->hydrate(static fn (): Channel => Channel::fromArray($payload));
     }
@@ -589,18 +603,50 @@ final class MonitorApiClient
     }
 
     /**
+     * Translate an optional idempotency key into the request headers and the
+     * retry decision for a create. A supplied key sets the `Idempotency-Key`
+     * header AND makes the create retryable — the backend dedups a replay
+     * carrying the same key and identical body, so a retry can only ever
+     * replay the original result, never create a second resource. With no key
+     * the create stays single-attempt. An empty/blank key is a programmer
+     * error (it would reach the backend as a real, useless key).
+     *
+     * @return array{0: array<string, string>, 1: bool} the extra headers and whether the create is retryable
+     */
+    private function idempotency(?string $idempotencyKey): array
+    {
+        if (null === $idempotencyKey) {
+            return [[], false];
+        }
+        if ('' === trim($idempotencyKey)) {
+            throw new \InvalidArgumentException('Idempotency key, when provided, must be a non-empty string.');
+        }
+        // Reject control characters (notably CR/LF) before they reach the
+        // header: it forecloses header injection and keeps a malformed key a
+        // clean \InvalidArgumentException rather than a PSR-7 throwable leaking
+        // out of buildRequest past the "callers only catch ApiException"
+        // contract.
+        if (1 === preg_match('/[\x00-\x1f\x7f]/', $idempotencyKey)) {
+            throw new \InvalidArgumentException('Idempotency key must not contain control characters.');
+        }
+
+        return [['Idempotency-Key' => $idempotencyKey], true];
+    }
+
+    /**
      * Send a JSON request and return the decoded object body, or throw the
      * mapped {@see ApiException} on any non-2xx / transport / decode failure.
      *
      * @param array<string, mixed>|null $body
+     * @param array<string, string>     $extraHeaders additional request headers (e.g. `Idempotency-Key`)
      *
      * @return array<string, mixed>
      *
      * @throws ApiException
      */
-    private function requestJson(string $method, string $path, ?array $body, bool $retryable): array
+    private function requestJson(string $method, string $path, ?array $body, bool $retryable, array $extraHeaders = []): array
     {
-        $response = $this->send($this->buildRequest($method, $path, $body), $retryable);
+        $response = $this->send($this->buildRequest($method, $path, $body, $extraHeaders), $retryable);
         $status = $response->getStatusCode();
         $rawBody = (string) $response->getBody();
 
@@ -645,10 +691,11 @@ final class MonitorApiClient
 
     /**
      * @param array<string, mixed>|null $body
+     * @param array<string, string>     $extraHeaders additional request headers (e.g. `Idempotency-Key`)
      *
      * @throws ApiTransportException when the request body cannot be JSON-encoded
      */
-    private function buildRequest(string $method, string $path, ?array $body): RequestInterface
+    private function buildRequest(string $method, string $path, ?array $body, array $extraHeaders = []): RequestInterface
     {
         $url = rtrim($this->configuration->endpoint, '/').self::API_PREFIX.$path;
 
@@ -658,6 +705,10 @@ final class MonitorApiClient
 
         if (null !== $this->configuration->apiKey) {
             $request = $request->withHeader('Authorization', 'Bearer '.$this->configuration->apiKey);
+        }
+
+        foreach ($extraHeaders as $name => $value) {
+            $request = $request->withHeader($name, $value);
         }
 
         if (null !== $body) {
@@ -683,11 +734,17 @@ final class MonitorApiClient
     }
 
     /**
-     * Send with a bounded retry budget. Idempotent GETs retry on transport
-     * failure and `5xx` within `Configuration::retries`; non-retryable
-     * requests (POST creates) get exactly one attempt. `4xx` and `2xx`
-     * always return immediately for the caller to map. `429` is returned
-     * as-is (not retried) so the caller can read `Retry-After`.
+     * Send with a bounded retry budget. Idempotent GETs (and the idempotent
+     * transitions / keyed creates) retry on transport failure and `5xx` within
+     * `Configuration::retries`; non-retryable requests get exactly one attempt.
+     * `4xx` and `2xx` always return immediately for the caller to map. `429` is
+     * returned as-is (not retried) so the caller can read `Retry-After`.
+     *
+     * The request body is rewound before every attempt: a retried request
+     * carries a body (PATCH, or a keyed create), and a PSR-18 client that
+     * consumed the stream on the first attempt would otherwise send an empty
+     * body on the next — which, for an idempotency-keyed replay, would change
+     * the server-side request fingerprint and defeat dedup.
      *
      * @throws ApiTransportException when every attempt fails at the transport level
      */
@@ -697,6 +754,11 @@ final class MonitorApiClient
         $lastTransport = null;
 
         for ($attempt = 1; $attempt <= $maxAttempts; ++$attempt) {
+            $body = $request->getBody();
+            if ($body->isSeekable()) {
+                $body->rewind();
+            }
+
             try {
                 $response = $this->httpClient->sendRequest($request);
             } catch (ClientExceptionInterface $e) {
