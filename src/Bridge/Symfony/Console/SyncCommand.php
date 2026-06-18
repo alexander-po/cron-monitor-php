@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 namespace CronMonitor\Bridge\Symfony\Console;
 
+use CronMonitor\Api\Exception\ApiException;
+use CronMonitor\Api\MonitorApiClient;
+use CronMonitor\Bridge\Symfony\Scheduler\ScheduledJob;
 use CronMonitor\Bridge\Symfony\Scheduler\ScheduleInventory;
+use CronMonitor\Client\Configuration;
+use CronMonitor\Sync\MonitorReconciler;
+use CronMonitor\Sync\ReconcilableJob;
+use CronMonitor\Sync\ReconcileOutcome;
+use CronMonitor\Sync\ReconcileResult;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -13,28 +21,27 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Lists the Symfony Scheduler jobs the bundle can see and prints the
- * `messages:` mapping snippet that the user should paste into
- * `config/packages/cron_monitor.yaml`.
+ * Lists the Symfony Scheduler jobs the bundle can see, and either prints the
+ * `messages:` mapping snippet to paste into `config/packages/cron_monitor.yaml`
+ * (the default) or — with `--apply` / `--dry-run` — reconciles those jobs
+ * against the account's monitors via the management API, creating the missing
+ * ones.
  *
- * Why a "list + suggest" command rather than a fully-automated push:
- *  - the cron-monitor server requires per-user authentication for monitor
- *    creation, so a silent push from a `bin/console` invocation that runs
- *    in CI / a deploy script would either mint anonymous monitors or fail.
- *    Both are worse than asking the developer to copy three lines of YAML
- *    once.
- *  - the developer is the source of truth for monitor names, grace periods,
- *    and channel routing. The command's output deliberately stops at the
- *    point where a human decision is required.
+ * The default "list + suggest" mode stays the safe, zero-credential path: it
+ * touches no network and asks the developer to wire UUIDs by hand. `--apply`
+ * is the opt-in automation now that the API exposes authenticated create +
+ * idempotency; `--dry-run` previews the same reconciliation without writing.
  */
 #[AsCommand(
     name: 'cron-monitor:sync',
-    description: 'List Symfony Scheduler jobs and emit a cron_monitor bundle messages map.',
+    description: 'List Symfony Scheduler jobs and emit a cron_monitor messages map, or reconcile them against the API.',
 )]
 final class SyncCommand extends Command
 {
     public function __construct(
         private readonly ScheduleInventory $inventory,
+        private readonly ?MonitorApiClient $apiClient = null,
+        private readonly ?Configuration $configuration = null,
     ) {
         parent::__construct();
     }
@@ -46,8 +53,26 @@ final class SyncCommand extends Command
                 'format',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Output format: table | yaml | json',
+                'Output format for the default list mode: table | yaml | json',
                 'table',
+            )
+            ->addOption(
+                'apply',
+                null,
+                InputOption::VALUE_NONE,
+                'Create the monitors that do not yet exist, via the management API.',
+            )
+            ->addOption(
+                'dry-run',
+                null,
+                InputOption::VALUE_NONE,
+                'Preview which monitors --apply would create, without creating any.',
+            )
+            ->addOption(
+                'channel',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Notification channel id to route created monitors to.',
             );
     }
 
@@ -62,6 +87,14 @@ final class SyncCommand extends Command
             return Command::SUCCESS;
         }
 
+        $apply = (bool) $input->getOption('apply');
+        $dryRun = (bool) $input->getOption('dry-run');
+
+        if ($apply || $dryRun) {
+            // --dry-run wins when both are given: never write on a hedged invocation.
+            return $this->reconcile($io, $jobs, apply: $apply && !$dryRun, channelOption: $input->getOption('channel'));
+        }
+
         $format = (string) $input->getOption('format');
 
         return match ($format) {
@@ -73,7 +106,132 @@ final class SyncCommand extends Command
     }
 
     /**
-     * @param list<\CronMonitor\Bridge\Symfony\Scheduler\ScheduledJob> $jobs
+     * @param list<ScheduledJob> $jobs
+     */
+    private function reconcile(SymfonyStyle $io, array $jobs, bool $apply, mixed $channelOption): int
+    {
+        if (null === $this->apiClient || null === $this->configuration?->apiKey) {
+            $io->error('cron-monitor:sync --apply/--dry-run needs an API token. Set cron_monitor.api_key (env CRON_MONITOR_API_KEY) and make sure a PSR-18 client is available.');
+
+            return Command::FAILURE;
+        }
+
+        $channelId = null;
+        if (null !== $channelOption) {
+            if (!\is_string($channelOption) || 1 !== preg_match('/^[1-9]\d*$/', $channelOption)) {
+                $io->error('--channel must be a positive integer channel id.');
+
+                return Command::INVALID;
+            }
+            $channelId = (int) $channelOption;
+        }
+
+        // Only cron-triggered jobs can be auto-created: the management API
+        // creates cron monitors, and a Symfony trigger may instead be a
+        // periodical/interval one whose __toString ("every 1 hour") is not a
+        // cron expression. Sending that as a cron schedule_expr would 422 for
+        // every interval job. Skip those with a visible note rather than
+        // firing doomed creates; the developer can create them by hand.
+        $reconcilable = [];
+        $skipped = [];
+        foreach ($jobs as $job) {
+            if ($this->looksLikeCron($job->trigger)) {
+                $reconcilable[] = new ReconcilableJob($job->messageClass, $job->trigger);
+            } else {
+                $skipped[] = $job;
+            }
+        }
+
+        $results = [];
+        if ([] !== $reconcilable) {
+            try {
+                $results = (new MonitorReconciler($this->apiClient))->reconcile($reconcilable, $apply, $channelId);
+            } catch (ApiException $e) {
+                $io->error('Could not list existing monitors: '.$e->getMessage());
+
+                return Command::FAILURE;
+            }
+        }
+
+        return $this->renderReconcile($io, $results, $skipped, $apply);
+    }
+
+    /**
+     * @param list<ReconcileResult> $results
+     * @param list<ScheduledJob>    $skipped
+     */
+    private function renderReconcile(SymfonyStyle $io, array $results, array $skipped, bool $apply): int
+    {
+        $rows = array_map(
+            static fn (ReconcileResult $r): array => [
+                $r->job->name,
+                $r->outcome->value,
+                $r->uuid ?? $r->error ?? '',
+            ],
+            $results,
+        );
+        foreach ($skipped as $job) {
+            $rows[] = [$job->messageClass, 'skipped', 'not a cron trigger: '.$job->trigger];
+        }
+
+        $io->table(['Job', 'Status', 'Monitor'], $rows);
+
+        if (!$apply) {
+            $io->note('Dry run: no monitors were created. Re-run with --apply to create the would-create rows.');
+
+            return Command::SUCCESS;
+        }
+
+        $created = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Created === $r->outcome);
+        $failed = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Failed === $r->outcome);
+
+        if ([] !== $created) {
+            $io->section('Wire each created monitor into config/packages/cron_monitor.yaml');
+            $io->writeln('cron_monitor:');
+            $io->writeln('    messages:');
+            foreach ($created as $r) {
+                $io->writeln(\sprintf("        '%s': '%s'", $r->job->name, (string) $r->uuid));
+            }
+            $io->newLine();
+        }
+
+        if ([] !== $failed) {
+            $io->warning(\sprintf('%d monitor(s) could not be created — see the table above.', \count($failed)));
+
+            return Command::FAILURE;
+        }
+
+        return Command::SUCCESS;
+    }
+
+    /**
+     * A conservative cron-expression sniff used to decide which jobs `--apply`
+     * can create. A standard cron is 5 (or 6, with seconds) whitespace-
+     * separated fields built only of cron tokens; a Symfony periodical
+     * trigger's human description ("every 1 hour") never matches that grammar
+     * across exactly 5–6 fields, so it is correctly skipped.
+     */
+    private function looksLikeCron(string $trigger): bool
+    {
+        $fields = preg_split('/\s+/', trim($trigger)) ?: [];
+        if (5 !== \count($fields) && 6 !== \count($fields)) {
+            return false;
+        }
+        foreach ($fields as $field) {
+            // Cron tokens: digits, wildcards, step/range/list separators, and
+            // the alphabetic month/day names (JAN, MON, …). Periodical
+            // descriptions are 1–4 words or carry parens, so the field-count
+            // gate above already excludes them.
+            if (1 !== preg_match('~^[a-z0-9*/,\-]+$~i', $field)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param list<ScheduledJob> $jobs
      */
     private function writeTable(SymfonyStyle $io, array $jobs): int
     {
@@ -95,7 +253,7 @@ final class SyncCommand extends Command
     }
 
     /**
-     * @param list<\CronMonitor\Bridge\Symfony\Scheduler\ScheduledJob> $jobs
+     * @param list<ScheduledJob> $jobs
      */
     private function writeJson(SymfonyStyle $io, array $jobs): int
     {
@@ -106,7 +264,7 @@ final class SyncCommand extends Command
     }
 
     /**
-     * @param list<\CronMonitor\Bridge\Symfony\Scheduler\ScheduledJob> $jobs
+     * @param list<ScheduledJob> $jobs
      */
     private function writeYaml(SymfonyStyle $io, array $jobs): int
     {
