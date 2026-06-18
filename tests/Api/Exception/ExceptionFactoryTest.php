@@ -36,6 +36,9 @@ final class ExceptionFactoryTest extends TestCase
             429 => RateLimitException::class,
             400 => UnexpectedResponseException::class,
             500 => UnexpectedResponseException::class,
+            // 502 is the channel-test delivery failure (backend Bad Gateway);
+            // it has no dedicated subclass and must fall to the default arm.
+            502 => UnexpectedResponseException::class,
             418 => UnexpectedResponseException::class,
         ];
 

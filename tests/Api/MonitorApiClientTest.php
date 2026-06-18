@@ -355,6 +355,30 @@ final class MonitorApiClientTest extends TestCase
         }
     }
 
+    public function test_get_account_round_trips_against_a_real_server(): void
+    {
+        $server = LocalHttpServer::start();
+        if (null === $server) {
+            self::markTestSkipped('LocalHttpServer could not boot in this environment.');
+        }
+
+        try {
+            $client = MonitorApiClient::create(new Configuration(
+                $server->baseUrl(),
+                apiKey: 'cmk_smoke',
+                allowInsecureEndpoint: true,
+            ));
+
+            $account = $client->getAccount();
+
+            self::assertSame('Growth', $account->plan->label);
+            self::assertSame(47, $account->monitorBudget->remaining);
+            self::assertSame(119, $account->apiRateLimit->remaining);
+        } finally {
+            $server->stop();
+        }
+    }
+
     public function test_create_monitor_with_invalid_utf8_throws_api_exception_not_json_exception(): void
     {
         $http = new RecordingHttpClient([]);

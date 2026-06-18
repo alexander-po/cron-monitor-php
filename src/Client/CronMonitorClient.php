@@ -37,7 +37,7 @@ final class CronMonitorClient
      */
     private const BODY_CAP_BYTES = 10000;
 
-    private const USER_AGENT = 'cron-monitor-php-sdk/1.0';
+    private const USER_AGENT = 'cron-monitor-php-sdk/1.1';
 
     public function __construct(
         private readonly Configuration $configuration,
