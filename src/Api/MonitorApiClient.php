@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace CronMonitor\Api;
 
+use CronMonitor\Api\Dto\Alert;
+use CronMonitor\Api\Dto\AlertPage;
 use CronMonitor\Api\Dto\ChannelPage;
 use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\MonitorPage;
+use CronMonitor\Api\Dto\Ping;
+use CronMonitor\Api\Dto\PingPage;
 use CronMonitor\Api\Dto\SnoozeDuration;
 use CronMonitor\Api\Dto\UpdateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
@@ -293,6 +297,118 @@ final class MonitorApiClient
         $payload = $this->requestJson('POST', '/monitors/'.$uuid.'/rotate-uuid', ['confirm' => $uuid], false);
 
         return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
+    }
+
+    /**
+     * One page of a monitor's ping history. Pings use opaque **cursor**
+     * (keyset) pagination — pass the previous page's {@see PingPage::$nextCursor}
+     * back as `$cursor`. `$limit` is clamped to [1, 100].
+     *
+     * @throws ApiException
+     */
+    public function listPings(string $uuid, int $limit = self::DEFAULT_LIST_LIMIT, ?string $cursor = null): PingPage
+    {
+        $this->assertUuid($uuid);
+        $limit = max(1, min($limit, self::MAX_LIST_LIMIT));
+
+        $query = ['limit' => $limit];
+        if (null !== $cursor && '' !== $cursor) {
+            $query['cursor'] = $cursor;
+        }
+
+        $payload = $this->requestJson('GET', '/monitors/'.$uuid.'/pings?'.http_build_query($query), null, true);
+
+        return $this->hydrate(static fn (): PingPage => PingPage::fromArray($payload));
+    }
+
+    /**
+     * Lazily walk a monitor's entire ping history across cursor pages. A
+     * generator so deep history does not materialise in memory.
+     *
+     * The walk follows `next_cursor` until it is null. Two defenses bound a
+     * non-conforming endpoint: a **cycle guard** throws
+     * {@see ApiTransportException} if the server hands back the very cursor it
+     * was just given (the keyset analogue of {@see allMonitors()}'s stale-
+     * offset defense), and the {@see MAX_PAGES} cap stops a longer loop.
+     *
+     * @return iterable<Ping>
+     *
+     * @throws ApiException
+     */
+    public function allPings(string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
+    {
+        $pageSize = max(1, min($pageSize, self::MAX_LIST_LIMIT));
+        $cursor = null;
+
+        for ($requests = 0; $requests < self::MAX_PAGES; ++$requests) {
+            $page = $this->listPings($uuid, $pageSize, $cursor);
+
+            foreach ($page->data as $ping) {
+                yield $ping;
+            }
+
+            if (null === $page->nextCursor) {
+                return;
+            }
+            if ($page->nextCursor === $cursor) {
+                throw new ApiTransportException('Ping pagination returned the same cursor it was given; the server may be returning an inconsistent listing.');
+            }
+            $cursor = $page->nextCursor;
+        }
+
+        throw new ApiTransportException(\sprintf('Ping pagination did not terminate within %d pages; the server may be returning an inconsistent listing.', self::MAX_PAGES));
+    }
+
+    /**
+     * One page of a monitor's alert history. Alerts use offset pagination
+     * exactly like {@see listMonitors()}; `$limit` is clamped to [1, 100] and a
+     * negative `$offset` is a programmer error.
+     *
+     * @throws ApiException
+     */
+    public function listAlerts(string $uuid, int $offset = 0, int $limit = self::DEFAULT_LIST_LIMIT): AlertPage
+    {
+        $this->assertUuid($uuid);
+        if ($offset < 0) {
+            throw new \InvalidArgumentException('offset must be >= 0.');
+        }
+        $limit = max(1, min($limit, self::MAX_LIST_LIMIT));
+
+        $payload = $this->requestJson('GET', '/monitors/'.$uuid.'/alerts?'.http_build_query(['offset' => $offset, 'limit' => $limit]), null, true);
+
+        return $this->hydrate(static fn (): AlertPage => AlertPage::fromArray($payload));
+    }
+
+    /**
+     * Lazily walk a monitor's entire alert history across offset pages. The
+     * termination and {@see MAX_PAGES} backstop mirror {@see allMonitors()}
+     * verbatim: the walk stops on a short/empty page and is driven by the
+     * locally-tracked offset, not the server-echoed one.
+     *
+     * @return iterable<Alert>
+     *
+     * @throws ApiException
+     */
+    public function allAlerts(string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
+    {
+        $pageSize = max(1, min($pageSize, self::MAX_LIST_LIMIT));
+        $offset = 0;
+
+        for ($requests = 0; $requests < self::MAX_PAGES; ++$requests) {
+            $page = $this->listAlerts($uuid, $offset, $pageSize);
+            $count = \count($page->data);
+
+            foreach ($page->data as $alert) {
+                yield $alert;
+            }
+
+            if ($count < $pageSize) {
+                return;
+            }
+            $offset += $count;
+        }
+
+        throw new ApiTransportException(\sprintf('Alert pagination did not terminate within %d pages; the server may be returning an inconsistent listing.', self::MAX_PAGES));
     }
 
     /**
