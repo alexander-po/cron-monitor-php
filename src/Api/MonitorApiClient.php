@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Api;
 
+use CronMonitor\Api\Dto\Account;
 use CronMonitor\Api\Dto\Alert;
 use CronMonitor\Api\Dto\AlertPage;
 use CronMonitor\Api\Dto\Channel;
@@ -529,6 +530,20 @@ final class MonitorApiClient
         $payload = $this->requestJson('POST', '/channels/'.$id.'/test', null, false);
 
         return $this->hydrate(static fn (): TestChannelResult => TestChannelResult::fromArray($payload));
+    }
+
+    /**
+     * The caller's account snapshot: plan, monitor budget, and live API
+     * rate-limit standing in one read — so a client can surface "how close am
+     * I to my limits?" without scraping rate-limit headers across requests.
+     *
+     * @throws ApiException
+     */
+    public function getAccount(): Account
+    {
+        $payload = $this->requestJson('GET', '/account', null, true);
+
+        return $this->hydrate(static fn (): Account => Account::fromArray($payload));
     }
 
     /**
