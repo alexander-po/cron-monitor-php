@@ -64,6 +64,22 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
+    public static function nullableInt(array $data, string $key): ?int
+    {
+        $value = $data[$key] ?? null;
+        if (null === $value) {
+            return null;
+        }
+        if (!\is_int($value)) {
+            throw self::typeError($key, 'int|null', $value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
     public static function bool(array $data, string $key): bool
     {
         $value = $data[$key] ?? null;
