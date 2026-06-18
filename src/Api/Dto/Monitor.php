@@ -12,8 +12,14 @@ use CronMonitor\Api\Internal\Hydrator;
  * body of a create).
  *
  * Timestamps are parsed from the backend's RFC 3339 atoms into
- * `\DateTimeImmutable`. `nextExpectedAt` / `lastPingAt` are null until the
- * monitor has a computed deadline / its first ping.
+ * `\DateTimeImmutable`. `nextExpectedAt` / `lastPingAt` / `snoozedUntil` are
+ * null until the monitor has a computed deadline / its first ping / an active
+ * snooze.
+ *
+ * `snoozedUntil` is the **last** constructor parameter, defaulted to null, so
+ * adding it stays binary-compatible for existing positional callers; a backend
+ * response without the `snoozed_until` key (older deployments / fixtures) still
+ * hydrates to null.
  */
 final class Monitor
 {
@@ -30,6 +36,7 @@ final class Monitor
         public readonly \DateTimeImmutable $createdAt,
         public readonly string $pingUrl,
         public readonly string $badgeUrl,
+        public readonly ?\DateTimeImmutable $snoozedUntil = null,
     ) {
     }
 
@@ -53,6 +60,7 @@ final class Monitor
             Hydrator::dateTime($data, 'created_at'),
             Hydrator::string($data, 'ping_url'),
             Hydrator::string($data, 'badge_url'),
+            Hydrator::nullableDateTime($data, 'snoozed_until'),
         );
     }
 }
