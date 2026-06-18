@@ -6,13 +6,17 @@ namespace CronMonitor\Api;
 
 use CronMonitor\Api\Dto\Alert;
 use CronMonitor\Api\Dto\AlertPage;
+use CronMonitor\Api\Dto\Channel;
 use CronMonitor\Api\Dto\ChannelPage;
+use CronMonitor\Api\Dto\ChannelSecret;
+use CronMonitor\Api\Dto\CreateChannelRequest;
 use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\MonitorPage;
 use CronMonitor\Api\Dto\Ping;
 use CronMonitor\Api\Dto\PingPage;
 use CronMonitor\Api\Dto\SnoozeDuration;
+use CronMonitor\Api\Dto\TestChannelResult;
 use CronMonitor\Api\Dto\UpdateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\Exception\ApiTransportException;
@@ -425,6 +429,109 @@ final class MonitorApiClient
     }
 
     /**
+     * Create a notification channel. Never retried — creates are not
+     * idempotent, so a blind replay risks a duplicate channel.
+     *
+     * @throws ApiException
+     */
+    public function createChannel(CreateChannelRequest $request): Channel
+    {
+        $payload = $this->requestJson('POST', '/channels', $request->toArray(), false);
+
+        return $this->hydrate(static fn (): Channel => Channel::fromArray($payload));
+    }
+
+    /**
+     * Fetch a single channel by id. The masked `config` is returned verbatim
+     * (secrets are redacted server-side).
+     *
+     * @throws ApiException
+     */
+    public function getChannel(int $id): Channel
+    {
+        $this->assertChannelId($id);
+
+        $payload = $this->requestJson('GET', '/channels/'.$id, null, true);
+
+        return $this->hydrate(static fn (): Channel => Channel::fromArray($payload));
+    }
+
+    /**
+     * Rename a channel — the label is the only mutable field (the backend's
+     * policy for a destination change is delete + create). Retried: re-applying
+     * the same label is idempotent.
+     *
+     * @throws ApiException
+     */
+    public function updateChannel(int $id, string $label): Channel
+    {
+        $this->assertChannelId($id);
+        if ('' === trim($label)) {
+            throw new \InvalidArgumentException('Channel label must be a non-empty string.');
+        }
+
+        $payload = $this->requestJson('PATCH', '/channels/'.$id, ['label' => $label], true);
+
+        return $this->hydrate(static fn (): Channel => Channel::fromArray($payload));
+    }
+
+    /**
+     * Delete a channel (the backend answers `204 No Content`). Retried:
+     * deleting is idempotent in effect; a replay after the server already
+     * processed the first attempt surfaces as a `404`.
+     *
+     * @throws ApiException
+     */
+    public function deleteChannel(int $id): void
+    {
+        $this->assertChannelId($id);
+
+        $this->requestNoContent('DELETE', '/channels/'.$id, null, true);
+    }
+
+    /**
+     * Rotate a webhook channel's signing secret, returning the channel plus
+     * the freshly-minted plaintext {@see ChannelSecret::$secret} — which the
+     * backend reveals **once**. Capture it immediately.
+     *
+     * **Never retried.** Rotation is not idempotent: a replay would mint yet
+     * another secret, and the first response (carrying the only copy of the
+     * earlier secret) would be lost. Only webhook channels have a rotatable
+     * secret; any other kind answers `422`.
+     *
+     * @throws ApiException
+     */
+    public function rotateChannelSecret(int $id): ChannelSecret
+    {
+        $this->assertChannelId($id);
+
+        $payload = $this->requestJson('POST', '/channels/'.$id.'/rotate-secret', null, false);
+
+        return $this->hydrate(static fn (): ChannelSecret => ChannelSecret::fromArray($payload));
+    }
+
+    /**
+     * Send a test alert through a channel.
+     *
+     * **Never retried.** A test send has an external side effect (it actually
+     * delivers) and consumes the per-user / per-IP test-send budget, so a
+     * blind replay would double-send and burn rate budget. A well-formed
+     * request whose downstream destination rejected the delivery answers
+     * `502` ({@see Exception\UnexpectedResponseException}); an
+     * unverified or transport-less channel answers `422`.
+     *
+     * @throws ApiException
+     */
+    public function testChannel(int $id): TestChannelResult
+    {
+        $this->assertChannelId($id);
+
+        $payload = $this->requestJson('POST', '/channels/'.$id.'/test', null, false);
+
+        return $this->hydrate(static fn (): TestChannelResult => TestChannelResult::fromArray($payload));
+    }
+
+    /**
      * Shared path for the POST status transitions (pause / resume / snooze /
      * unsnooze): validate the UUID locally, POST to the sub-resource, and
      * hydrate the monitor the backend returns. All are retryable — each is an
@@ -451,6 +558,18 @@ final class MonitorApiClient
     {
         if (1 !== preg_match(self::UUID_PATTERN, $uuid)) {
             throw new \InvalidArgumentException(\sprintf('%s is not a valid monitor UUID.', $uuid));
+        }
+    }
+
+    /**
+     * Validate a channel id locally before any HTTP request — the backend
+     * routes only match positive integers, so a non-positive id is a
+     * programmer error worth catching with a friendly message.
+     */
+    private function assertChannelId(int $id): void
+    {
+        if ($id < 1) {
+            throw new \InvalidArgumentException('Channel id must be a positive integer.');
         }
     }
 
