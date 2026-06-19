@@ -466,7 +466,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function getChannel(int $id): Channel
+    public function getChannel(string $id): Channel
     {
         $this->assertChannelId($id);
 
@@ -482,7 +482,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function updateChannel(int $id, string $label): Channel
+    public function updateChannel(string $id, string $label): Channel
     {
         $this->assertChannelId($id);
         if ('' === trim($label)) {
@@ -501,7 +501,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function deleteChannel(int $id): void
+    public function deleteChannel(string $id): void
     {
         $this->assertChannelId($id);
 
@@ -520,7 +520,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function rotateChannelSecret(int $id): ChannelSecret
+    public function rotateChannelSecret(string $id): ChannelSecret
     {
         $this->assertChannelId($id);
 
@@ -541,7 +541,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function testChannel(int $id): TestChannelResult
+    public function testChannel(string $id): TestChannelResult
     {
         $this->assertChannelId($id);
 
@@ -595,14 +595,18 @@ final class MonitorApiClient
     }
 
     /**
-     * Validate a channel id locally before any HTTP request — the backend
-     * routes only match positive integers, so a non-positive id is a
-     * programmer error worth catching with a friendly message.
+     * Validate a channel id locally before any HTTP request. The id is carried
+     * as a string — like {@see Channel::$id}, which the
+     * backend serialises from a Doctrine BIGINT that can exceed PHP's int range
+     * — so a returned `$channel->id` feeds straight back in without a lossy
+     * `(int)` cast. The backend route only matches a run of digits, so anything
+     * that is not a positive decimal integer is a programmer error worth a
+     * friendly local message.
      */
-    private function assertChannelId(int $id): void
+    private function assertChannelId(string $id): void
     {
-        if ($id < 1) {
-            throw new \InvalidArgumentException('Channel id must be a positive integer.');
+        if (1 !== preg_match('/^[1-9]\d*$/', $id)) {
+            throw new \InvalidArgumentException(\sprintf('%s is not a valid channel id (expected a positive integer).', var_export($id, true)));
         }
     }
 

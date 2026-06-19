@@ -89,7 +89,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $http = new RecordingHttpClient([self::jsonResponse(200, self::channelRow())]);
         $client = $this->client($http);
 
-        $channel = $client->getChannel(7);
+        $channel = $client->getChannel('7');
 
         self::assertSame('7', $channel->id);
         self::assertSame('https://cronheart.com/api/v1/channels/7', (string) $http->requests[0]->getUri());
@@ -102,7 +102,20 @@ final class ChannelLifecycleApiTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         try {
-            $client->getChannel(0);
+            $client->getChannel('0');
+        } finally {
+            self::assertSame([], $http->requests);
+        }
+    }
+
+    public function test_get_channel_rejects_a_non_numeric_id_without_http(): void
+    {
+        $http = new RecordingHttpClient([]);
+        $client = $this->client($http);
+
+        $this->expectException(\InvalidArgumentException::class);
+        try {
+            $client->getChannel('not-an-id');
         } finally {
             self::assertSame([], $http->requests);
         }
@@ -113,7 +126,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $http = new RecordingHttpClient([self::jsonResponse(200, self::channelRow(['label' => 'Renamed']))]);
         $client = $this->client($http);
 
-        $channel = $client->updateChannel(7, 'Renamed');
+        $channel = $client->updateChannel('7', 'Renamed');
 
         self::assertSame('Renamed', $channel->label);
         $sent = $http->requests[0];
@@ -129,7 +142,7 @@ final class ChannelLifecycleApiTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         try {
-            $client->updateChannel(7, '   ');
+            $client->updateChannel('7', '   ');
         } finally {
             self::assertSame([], $http->requests);
         }
@@ -140,7 +153,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $http = new RecordingHttpClient([self::jsonResponse(503, []), self::jsonResponse(200, self::channelRow())]);
         $client = $this->client($http, retries: 1);
 
-        $client->updateChannel(7, 'Renamed');
+        $client->updateChannel('7', 'Renamed');
 
         self::assertCount(2, $http->requests);
     }
@@ -150,7 +163,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $http = new RecordingHttpClient([new Response(204, [], '')]);
         $client = $this->client($http);
 
-        $client->deleteChannel(7);
+        $client->deleteChannel('7');
 
         $sent = $http->requests[0];
         self::assertSame('DELETE', $sent->getMethod());
@@ -163,7 +176,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $client = $this->client($http);
 
         $this->expectException(NotFoundException::class);
-        $client->deleteChannel(7);
+        $client->deleteChannel('7');
     }
 
     public function test_rotate_channel_secret_returns_plaintext_once(): void
@@ -171,7 +184,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $http = new RecordingHttpClient([self::jsonResponse(200, self::channelRow(['secret' => 'whsec_freshly_minted']))]);
         $client = $this->client($http);
 
-        $result = $client->rotateChannelSecret(7);
+        $result = $client->rotateChannelSecret('7');
 
         self::assertSame('whsec_freshly_minted', $result->secret);
         self::assertSame('7', $result->channel->id);
@@ -187,7 +200,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $client = $this->client($http, retries: 3);
 
         try {
-            $client->rotateChannelSecret(7);
+            $client->rotateChannelSecret('7');
             self::fail('Expected an exception.');
         } catch (UnexpectedResponseException $e) {
             self::assertSame(503, $e->statusCode);
@@ -204,7 +217,7 @@ final class ChannelLifecycleApiTest extends TestCase
         ])]);
         $client = $this->client($http);
 
-        $result = $client->testChannel(7);
+        $result = $client->testChannel('7');
 
         self::assertTrue($result->delivered);
         self::assertTrue($result->newlyVerified);
@@ -223,7 +236,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $client = $this->client($http);
 
         try {
-            $client->testChannel(7);
+            $client->testChannel('7');
             self::fail('Expected an exception.');
         } catch (UnexpectedResponseException $e) {
             self::assertSame(502, $e->statusCode);
@@ -238,7 +251,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $client = $this->client($http);
 
         $this->expectException(ValidationException::class);
-        $client->testChannel(7);
+        $client->testChannel('7');
     }
 
     public function test_test_channel_is_not_retried_on_server_error(): void
@@ -247,7 +260,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $client = $this->client($http, retries: 3);
 
         try {
-            $client->testChannel(7);
+            $client->testChannel('7');
             self::fail('Expected an exception.');
         } catch (UnexpectedResponseException $e) {
             self::assertSame(503, $e->statusCode);

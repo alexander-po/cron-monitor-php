@@ -401,9 +401,10 @@ foreach ($api->allAlerts($uuid) as $alert) {
 }
 
 // Channels: create / rename / delete / test / rotate the signing secret.
+// Channel ids are strings (the backend id is a BIGINT) — pass $channel->id straight back.
 $channel = $api->createChannel(CreateChannelRequest::email('Ops inbox', 'ops@example.com'));
-$api->updateChannel((int) $channel->id, 'Renamed');
-$result = $api->testChannel((int) $channel->id);   // sends a real test alert
+$api->updateChannel($channel->id, 'Renamed');
+$result = $api->testChannel($channel->id);   // sends a real test alert
 $secret = $api->rotateChannelSecret($webhookChannelId);  // plaintext returned ONCE
 
 // Account: plan, monitor budget and live rate-limit standing in one read.
