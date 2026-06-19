@@ -307,7 +307,11 @@ final class MonitorApiClient
     {
         $this->assertUuid($uuid);
 
-        $payload = $this->requestJson('POST', '/monitors/'.$uuid.'/rotate-uuid', ['confirm' => $uuid], false);
+        // The backend compares `confirm` with a strict, case-sensitive `!==`
+        // against the canonical lowercase UUID, while assertUuid (and the
+        // backend route) accept any case — so normalise to lowercase or an
+        // uppercase-but-valid UUID would 422 "Rotation must be confirmed".
+        $payload = $this->requestJson('POST', '/monitors/'.$uuid.'/rotate-uuid', ['confirm' => strtolower($uuid)], false);
 
         return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
     }

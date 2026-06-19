@@ -206,15 +206,21 @@ final class SyncCommand extends Command
 
     /**
      * A conservative cron-expression sniff used to decide which jobs `--apply`
-     * can create. A standard cron is 5 (or 6, with seconds) whitespace-
-     * separated fields built only of cron tokens; a Symfony periodical
-     * trigger's human description ("every 1 hour") never matches that grammar
-     * across exactly 5–6 fields, so it is correctly skipped.
+     * can create. The backend validates standard 5-field cron, so the gate
+     * requires exactly 5 whitespace-separated cron-token fields; a Symfony
+     * periodical trigger's human description ("every 1 hour") never matches
+     * that grammar and is correctly skipped, and a 6-field/seconds expression
+     * is skipped too rather than sent as a create the backend would reject.
+     *
+     * Note: created monitors are always UTC — the Symfony Scheduler triggers
+     * expose no public timezone, so a non-UTC cron synced via `--apply` must
+     * have its timezone set on the dashboard. (The Laravel bridge does carry
+     * the per-event timezone through.)
      */
     private function looksLikeCron(string $trigger): bool
     {
         $fields = preg_split('/\s+/', trim($trigger)) ?: [];
-        if (5 !== \count($fields) && 6 !== \count($fields)) {
+        if (5 !== \count($fields)) {
             return false;
         }
         foreach ($fields as $field) {

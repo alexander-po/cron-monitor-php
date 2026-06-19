@@ -126,6 +126,52 @@ final class MonitorReconcilerTest extends TestCase
         self::assertSame([], $body['channel_ids']);
     }
 
+    public function test_apply_threads_the_job_timezone_into_the_created_monitor(): void
+    {
+        $http = new RecordingHttpClient([
+            self::listPage([]),
+            self::createdMonitor('App\\Cron\\Hourly', '22222222-2222-4222-8222-222222222222'),
+        ]);
+        $reconciler = $this->reconciler($http);
+
+        $reconciler->reconcile([new ReconcilableJob('App\\Cron\\Hourly', '0 9 * * *', 'America/New_York')], apply: true);
+
+        $body = json_decode((string) $http->bodies[1], true);
+        self::assertSame('America/New_York', $body['tz'], 'a non-UTC schedule must not be created as a UTC monitor');
+    }
+
+    public function test_apply_defaults_to_utc_when_the_job_has_no_timezone(): void
+    {
+        $http = new RecordingHttpClient([
+            self::listPage([]),
+            self::createdMonitor('App\\Cron\\Hourly', '22222222-2222-4222-8222-222222222222'),
+        ]);
+        $reconciler = $this->reconciler($http);
+
+        $reconciler->reconcile([new ReconcilableJob('App\\Cron\\Hourly', '0 * * * *')], apply: true);
+
+        $body = json_decode((string) $http->bodies[1], true);
+        self::assertSame('UTC', $body['tz']);
+    }
+
+    public function test_same_name_jobs_are_flagged_as_conflict_and_not_created(): void
+    {
+        // Two jobs sharing a name cannot both be reconciled by name; both must
+        // be reported as a conflict and neither created.
+        $http = new RecordingHttpClient([self::listPage([])]);
+        $reconciler = $this->reconciler($http);
+
+        $results = $reconciler->reconcile([
+            new ReconcilableJob('App\\Cron\\Dup', '0 9 * * *'),
+            new ReconcilableJob('App\\Cron\\Dup', '0 21 * * *'),
+        ], apply: true);
+
+        self::assertSame(ReconcileOutcome::Conflict, $results[0]->outcome);
+        self::assertSame(ReconcileOutcome::Conflict, $results[1]->outcome);
+        self::assertNotNull($results[0]->error);
+        self::assertCount(1, $http->requests, 'only the listing — no create for an ambiguous name');
+    }
+
     public function test_apply_routes_created_monitors_to_a_channel(): void
     {
         $http = new RecordingHttpClient([

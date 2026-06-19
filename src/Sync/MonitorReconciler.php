@@ -52,8 +52,21 @@ final class MonitorReconciler
     {
         $existing = $this->existingByName();
 
+        // Reconciliation is by name, so two jobs sharing a name cannot both
+        // become monitors — silently creating one and reporting the other
+        // "Existing" would leave the second schedule unmonitored. Flag every
+        // occurrence of a duplicated name as a conflict for the caller to
+        // disambiguate, and create none of them.
+        $nameCounts = array_count_values(array_map(static fn (ReconcilableJob $j): string => $j->name, $jobs));
+
         $results = [];
         foreach ($jobs as $job) {
+            if (($nameCounts[$job->name] ?? 0) > 1) {
+                $results[] = ReconcileResult::conflict($job, \sprintf('%d scheduled jobs share the name "%s"; give them distinct names or create them manually.', $nameCounts[$job->name], $job->name));
+
+                continue;
+            }
+
             if (isset($existing[$job->name])) {
                 $results[] = ReconcileResult::existing($job, $existing[$job->name]);
 
@@ -102,6 +115,7 @@ final class MonitorReconciler
             $job->name,
             ScheduleKind::Cron,
             $job->cronExpr,
+            tz: $job->tz ?? 'UTC',
             graceSeconds: $graceSeconds,
             channelIds: null === $channelId ? [] : [$channelId],
         );
@@ -115,19 +129,16 @@ final class MonitorReconciler
      * changes the moment any field does — matching the backend's full-body
      * request fingerprint, so a re-run that, say, changes the routed channel
      * is a fresh create rather than a `409` against a key bound to a different
-     * body.
+     * body. Derived generically from {@see CreateMonitorRequest::toArray()} so
+     * it cannot silently drift from the wire body when a field is added.
      */
     private function idempotencyKey(CreateMonitorRequest $request): string
     {
-        $body = $request->toArray();
+        $parts = [];
+        foreach ($request->toArray() as $key => $value) {
+            $parts[] = $key.'='.(\is_array($value) ? implode(',', $value) : (string) $value);
+        }
 
-        return 'sync-'.hash('sha256', implode("\n", [
-            $body['name'],
-            $body['schedule_kind'],
-            $body['schedule_expr'],
-            $body['tz'],
-            (string) $body['grace_seconds'],
-            implode(',', $body['channel_ids']),
-        ]));
+        return 'sync-'.hash('sha256', implode("\n", $parts));
     }
 }

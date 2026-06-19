@@ -20,4 +20,7 @@ enum ReconcileOutcome: string
 
     /** A create was attempted under `--apply` but the API rejected it. */
     case Failed = 'failed';
+
+    /** Multiple jobs share this name, so it cannot be reconciled by name. */
+    case Conflict = 'conflict';
 }

@@ -60,6 +60,21 @@ final class ConfigurationTest extends TestCase
         new Configuration('https://cronheart.com', retries: -1);
     }
 
+    public function test_constructor_rejects_api_key_with_control_characters(): void
+    {
+        // A CR/LF in the token would make the PSR-7 Authorization header throw
+        // inside a ping — fail fast at construction instead, where a throw is
+        // expected, so it can never break a running cron job.
+        $this->expectException(\InvalidArgumentException::class);
+        new Configuration('https://cronheart.com', apiKey: "cmk_secret\nX-Injected: 1");
+    }
+
+    public function test_constructor_accepts_a_clean_api_key(): void
+    {
+        $config = new Configuration('https://cronheart.com', apiKey: 'cmk_clean_token_value');
+        self::assertSame('cmk_clean_token_value', $config->apiKey);
+    }
+
     public function test_ping_url_strips_trailing_slash_from_endpoint(): void
     {
         $config = new Configuration('https://cronheart.com/');

@@ -440,9 +440,15 @@ bin/console cron-monitor:sync --apply --channel=7
 
 Reconciliation is **by name**, so renaming a job creates a second monitor
 rather than renaming the first — rename on the dashboard too, or delete the
-orphan. `--apply` / `--dry-run` need an API key; only cron-expressed jobs
-are auto-created (interval/closure jobs are reported skipped — create those
-by hand).
+orphan. Two jobs that share a name are reported as a `conflict` and neither
+is created (give them distinct names). `--apply` / `--dry-run` need an API
+key; only cron-expressed jobs are auto-created (interval/closure jobs are
+reported skipped — create those by hand).
+
+The Laravel bridge carries each event's timezone into the created monitor.
+The Symfony Scheduler exposes no per-trigger timezone, so Symfony-synced
+monitors are created in **UTC** — if a Symfony schedule runs in another
+zone, set the monitor's timezone on the dashboard after creating it.
 
 ## Configuration knobs
 

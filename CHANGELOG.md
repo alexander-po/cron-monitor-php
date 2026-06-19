@@ -44,6 +44,12 @@ creates missing monitors. **No breaking changes** — code written against
   the account by name and creates the missing ones. `--dry-run` previews
   without writing; `--channel=<id>` routes created monitors. The default
   no-flag mode keeps the credential-free list + config-snippet behaviour.
+  The Laravel bridge threads each event's timezone into the created monitor
+  (a non-UTC schedule is not silently created as UTC); the Symfony Scheduler
+  exposes no per-trigger timezone, so Symfony-synced monitors are created in
+  UTC (set their timezone on the dashboard if the schedule is not UTC). Two
+  jobs sharing a name are reported as a `conflict` and neither is created,
+  rather than silently collapsing onto one monitor.
 
 ### Fixed
 

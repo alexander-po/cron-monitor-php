@@ -254,6 +254,19 @@ final class MonitorLifecycleApiTest extends TestCase
         self::assertSame(['confirm' => self::UUID], json_decode((string) $sent->getBody(), true));
     }
 
+    public function test_rotate_monitor_uuid_sends_a_lowercase_confirm(): void
+    {
+        // An uppercase-but-valid UUID passes local validation and the backend
+        // route, but the backend's confirm check is case-sensitive against the
+        // canonical lowercase — so the client must lowercase the confirm value.
+        $http = new RecordingHttpClient([self::jsonResponse(200, self::monitorRow())]);
+        $client = $this->client($http);
+
+        $client->rotateMonitorUuid(strtoupper(self::UUID));
+
+        self::assertSame(['confirm' => self::UUID], json_decode((string) $http->requests[0]->getBody(), true));
+    }
+
     public function test_rotate_monitor_uuid_is_not_retried_on_server_error(): void
     {
         $http = new RecordingHttpClient([

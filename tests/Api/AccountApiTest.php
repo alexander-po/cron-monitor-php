@@ -30,10 +30,10 @@ final class AccountApiTest extends TestCase
     /**
      * @return array<string, mixed>
      */
-    private static function accountBody(string $planKey = 'growth'): array
+    private static function accountBody(string $planKey = 'starter'): array
     {
         return [
-            'plan' => ['key' => $planKey, 'label' => 'Growth', 'monitor_limit' => 50],
+            'plan' => ['key' => $planKey, 'label' => 'Starter', 'monitor_limit' => 50],
             'monitor_budget' => ['used' => 12, 'limit' => 50, 'remaining' => 38],
             'api_rate_limit' => ['limit' => 120, 'remaining' => 119],
         ];
@@ -51,8 +51,8 @@ final class AccountApiTest extends TestCase
 
         $account = $client->getAccount();
 
-        self::assertSame(PlanKey::Growth, $account->plan->key);
-        self::assertSame('Growth', $account->plan->label);
+        self::assertSame(PlanKey::Starter, $account->plan->key);
+        self::assertSame('Starter', $account->plan->label);
         self::assertSame(50, $account->plan->monitorLimit);
         self::assertSame(12, $account->monitorBudget->used);
         self::assertSame(38, $account->monitorBudget->remaining);

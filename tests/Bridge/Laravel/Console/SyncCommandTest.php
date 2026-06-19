@@ -59,6 +59,13 @@ final class SyncCommandTest extends TestCase
         return $this->scheduleOf($event);
     }
 
+    private function scheduleInTimezone(string $command, string $tz): Schedule
+    {
+        $event = (new Event($this->noopMutex(), $command))->cron('0 9 * * *')->timezone($tz);
+
+        return $this->scheduleOf($event);
+    }
+
     private function scheduleWithClosure(): Schedule
     {
         $mutex = $this->noopMutex();
@@ -191,6 +198,19 @@ final class SyncCommandTest extends TestCase
 
         self::assertSame(2, $exit);
         self::assertSame([], $http->requests);
+    }
+
+    public function test_apply_threads_the_event_timezone_into_the_created_monitor(): void
+    {
+        $uuid = '33333333-3333-4333-8333-333333333333';
+        $http = new RecordingHttpClient([self::listPage(), self::createdMonitor($uuid)]);
+        $tester = $this->tester($http, $this->scheduleInTimezone('reports:run', 'America/New_York'));
+
+        $exit = $tester->execute(['--apply' => true]);
+
+        self::assertSame(0, $exit);
+        $body = json_decode((string) $http->bodies[1], true);
+        self::assertSame('America/New_York', $body['tz'], 'a non-UTC scheduled event must create a non-UTC monitor');
     }
 
     public function test_apply_skips_a_closure_event_without_creating_it(): void

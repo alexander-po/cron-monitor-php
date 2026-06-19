@@ -131,7 +131,13 @@ final class SyncCommand extends Command
             if (str_starts_with($row['command'], '<')) {
                 $skipped[] = $row['command'];
             } else {
-                $jobs[] = new ReconcilableJob($row['command'], $row['expression']);
+                // describeTimezone returns a concrete IANA zone or the
+                // 'app default' sentinel (the scheduler resolves that to the
+                // app's config timezone at run time, which the SDK can't see).
+                // Pass a concrete zone through so the monitor is created in it;
+                // leave it null for the sentinel so the monitor defaults to UTC.
+                $tz = 'app default' === $row['timezone'] ? null : $row['timezone'];
+                $jobs[] = new ReconcilableJob($row['command'], $row['expression'], $tz);
             }
         }
 

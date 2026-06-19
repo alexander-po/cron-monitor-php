@@ -371,7 +371,7 @@ final class MonitorApiClientTest extends TestCase
 
             $account = $client->getAccount();
 
-            self::assertSame('Growth', $account->plan->label);
+            self::assertSame('Starter', $account->plan->label);
             self::assertSame(47, $account->monitorBudget->remaining);
             self::assertSame(119, $account->apiRateLimit->remaining);
         } finally {

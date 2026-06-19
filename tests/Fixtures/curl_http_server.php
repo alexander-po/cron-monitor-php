@@ -64,7 +64,7 @@ if ('/api/v1/account' === $path) {
     header('Content-Type: application/json');
     http_response_code(200);
     echo json_encode([
-        'plan' => ['key' => 'growth', 'label' => 'Growth', 'monitor_limit' => 50],
+        'plan' => ['key' => 'starter', 'label' => 'Starter', 'monitor_limit' => 50],
         'monitor_budget' => ['used' => 3, 'limit' => 50, 'remaining' => 47],
         'api_rate_limit' => ['limit' => 120, 'remaining' => 119],
     ], \JSON_THROW_ON_ERROR);

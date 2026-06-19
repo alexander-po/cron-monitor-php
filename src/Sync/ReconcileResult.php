@@ -38,4 +38,9 @@ final class ReconcileResult
     {
         return new self($job, ReconcileOutcome::Failed, error: $error);
     }
+
+    public static function conflict(ReconcilableJob $job, string $error): self
+    {
+        return new self($job, ReconcileOutcome::Conflict, error: $error);
+    }
 }
