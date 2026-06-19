@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 Project-specific notes for agents (Claude Code, Cursor, etc.) working in
-this repository. Sibling notes in [`../cron-monitor/CLAUDE.md`](../cron-monitor/CLAUDE.md)
-cover the backend service this SDK pings.
+this repository. The backend service this SDK pings is the cron-monitor
+server behind cronheart.com (a separate, private repository).
 
 ## What this repo is
 
@@ -14,9 +14,9 @@ dependencies, first-class Symfony Scheduler + Messenger and Laravel
 Scheduler bridges.
 
 Source of truth for the wire contract — ping URL shape, body cap, action
-regex, accepted HTTP responses — is the sibling `cron-monitor` backend at
-`../cron-monitor` (`src/Controller/PingController.php`,
-`src/Entity/Ping.php`). When you change either side, update both.
+regex, accepted HTTP responses — is the cron-monitor backend (the private
+service repo: its ping controller and `Ping` entity). When you change either
+side, update both.
 
 ## Hard contract: never break the host job
 
@@ -116,20 +116,22 @@ callback without booting a container. See
 ## Wire contract anchors
 
 These constants and regex are anchored to the backend. If you change one
-side, change the other in the same PR (cross-repo, separately reviewed):
+side, change the other in the same PR (cross-repo, separately reviewed).
+The backend lives in its own private repo, so its column names the concept,
+not a file path:
 
-| Item                  | SDK location                                | Backend location                                          |
+| Item                  | SDK location                                | Backend anchor                                            |
 |-----------------------|---------------------------------------------|-----------------------------------------------------------|
-| `BODY_CAP_BYTES`      | `src/Client/CronMonitorClient.php` (10 000) | `src/Entity/Ping.php::BODY_EXCERPT_MAX_BYTES` (10 000)    |
-| Action segment regex  | `src/Client/Configuration.php` (`{1,16}`)   | `src/Controller/PingController.php` route (`{1,16}`)      |
-| UUID validation       | `src/Client/Configuration.php` (canonical) | `src/Controller/PingController.php` route (`{36}` hex)    |
-| Default endpoint      | `src/Client/Configuration.php`              | Production Apache vhost (`cronheart.com`)                  |
-| Snooze durations      | `src/Api/Dto/SnoozeDuration.php` (`1h/4h/1d/1w`) | `src/Enum/SnoozeDuration.php`                         |
-| Channel kinds         | `src/Api/Dto/ChannelKind.php` (request-side) | `src/Enum/ChannelKind.php`                               |
-| Plan keys             | `src/Api/Dto/PlanKey.php` (`free/starter/growth/scale`) | `src/Enum/Plan.php`                           |
-| BIGINT ids as strings | `Ping`/`Alert`/`Channel` `$id` (`string`)   | `*ToArray()` emit Doctrine BIGINT `getId()` as JSON string |
-| 204 / 502 contract    | `requestNoContent()` (204); 502 → `UnexpectedResponseException` | DELETE routes; channel-test `Problem::badGateway` |
-| `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | `src/Service/Api/IdempotencyGuard.php` (full-body fingerprint) |
+| `BODY_CAP_BYTES`      | `src/Client/CronMonitorClient.php` (10 000) | backend `Ping` entity body-excerpt cap (10 000)           |
+| Action segment regex  | `src/Client/Configuration.php` (`{1,16}`)   | backend ping route (`{1,16}`)                             |
+| UUID validation       | `src/Client/Configuration.php` (canonical) | backend ping route (`{36}` hex)                           |
+| Default endpoint      | `src/Client/Configuration.php`              | production host (`cronheart.com`)                         |
+| Snooze durations      | `src/Api/Dto/SnoozeDuration.php` (`1h/4h/1d/1w`) | backend `SnoozeDuration` enum                        |
+| Channel kinds         | `src/Api/Dto/ChannelKind.php` (request-side) | backend `ChannelKind` enum                              |
+| Plan keys             | `src/Api/Dto/PlanKey.php` (`free/starter/growth/scale`) | backend `Plan` enum                          |
+| BIGINT ids as strings | `Ping`/`Alert`/`Channel` `$id` (`string`)   | backend serialises Doctrine BIGINT `getId()` as JSON string |
+| 204 / 502 contract    | `requestNoContent()` (204); 502 → `UnexpectedResponseException` | backend DELETE routes; channel-test bad-gateway (502) |
+| `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | backend idempotency guard (full-body fingerprint)         |
 
 ## What this SDK does NOT do
 
