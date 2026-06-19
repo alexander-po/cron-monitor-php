@@ -8,6 +8,63 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.1.0] — 2026-06-19
+
+A feature release rounding the management-API client out to the backend's
+full `/api/v1` surface, plus an opt-in `cron-monitor:sync --apply` that
+creates missing monitors. **No breaking changes** — code written against
+1.0.0 keeps working unchanged; everything here is additive.
+
+### Added
+
+- **`CronMonitor\Api\MonitorApiClient` — monitor lifecycle:**
+  `updateMonitor()`, `deleteMonitor()`, `pauseMonitor()`, `resumeMonitor()`,
+  `snoozeMonitor()`, `unsnoozeMonitor()`, `rotateMonitorUuid()`. Idempotent
+  transitions retry within the configured budget; rotation (which kills the
+  old ping URL with no grace) never retries.
+- **Monitor history reads:** `listPings()` / `allPings()` (opaque cursor
+  pagination with a cycle guard) and `listAlerts()` / `allAlerts()` (offset
+  pagination), the latter mirroring `allMonitors()`.
+- **Channel lifecycle:** `createChannel()`, `getChannel()`,
+  `updateChannel()`, `deleteChannel()`, `rotateChannelSecret()` (returns the
+  once-only plaintext), `testChannel()`. Side-effecting verbs
+  (create / rotate-secret / test) never retry.
+- **`getAccount()`** — plan, monitor budget, and live API rate-limit
+  standing in one read.
+- **Optional `Idempotency-Key`** on `createMonitor()` / `createChannel()`
+  (trailing `?string $idempotencyKey`). Supplying a key makes the create
+  retryable — the backend dedups a replay carrying the same key and body.
+- **New DTOs / enums:** `UpdateMonitorRequest`, `CreateChannelRequest`,
+  `Ping`/`PingPage`, `Alert`/`AlertPage`, `ChannelSecret`,
+  `TestChannelResult`, `Account`/`Plan`/`MonitorBudget`/`RateLimitStanding`,
+  and the `SnoozeDuration` / `PingKind` / `AlertKind` / `ChannelKind` /
+  `PlanKey` enums. `Monitor` gained a nullable `snoozedUntil`.
+- **`cron-monitor:sync --apply`** on both bridges (via the shared
+  `CronMonitor\Sync\MonitorReconciler`): reconciles scheduler jobs against
+  the account by name and creates the missing ones. `--dry-run` previews
+  without writing; `--channel=<id>` routes created monitors. The default
+  no-flag mode keeps the credential-free list + config-snippet behaviour.
+  The Laravel bridge threads each event's timezone into the created monitor
+  (a non-UTC schedule is not silently created as UTC); the Symfony Scheduler
+  exposes no per-trigger timezone, so Symfony-synced monitors are created in
+  UTC (set their timezone on the dashboard if the schedule is not UTC). Two
+  jobs sharing a name are reported as a `conflict` and neither is created,
+  rather than silently collapsing onto one monitor.
+
+### Fixed
+
+- `Channel::$id` is now a string (the backend serialises the channel's
+  BIGINT id as a JSON string); the 1.0.0 `int` typing would have thrown on
+  every real `listChannels()` response. The channel-by-id methods
+  (`getChannel`, `updateChannel`, `deleteChannel`, `rotateChannelSecret`,
+  `testChannel`) take the id as a `string` to match, and
+  `CreateMonitorRequest`/`UpdateMonitorRequest::$channelIds` now accept
+  `int|string` (normalised to a string on the wire) — so a returned
+  `$channel->id` feeds straight back in (to fetch, mutate, or route a
+  monitor) without a lossy `(int)` cast that would corrupt a BIGINT beyond
+  PHP's int range. Passing channel ids as ints stays valid, so existing
+  1.0.0 `createMonitor` callers keep working.
+
 ## [1.0.0] — 2026-06-09
 
 First stable release. The ping client and its bridges have been steady

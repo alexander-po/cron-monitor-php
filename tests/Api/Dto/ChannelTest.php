@@ -13,7 +13,7 @@ final class ChannelTest extends TestCase
     public function test_channel_from_array_keeps_masked_config_verbatim(): void
     {
         $channel = Channel::fromArray([
-            'id' => 7,
+            'id' => '7',
             'kind' => 'webhook',
             'label' => 'Ops webhook',
             'verified' => true,
@@ -21,7 +21,7 @@ final class ChannelTest extends TestCase
             'created_at' => '2026-01-01T00:00:00+00:00',
         ]);
 
-        self::assertSame(7, $channel->id);
+        self::assertSame('7', $channel->id);
         self::assertSame('webhook', $channel->kind);
         self::assertSame('Ops webhook', $channel->label);
         self::assertTrue($channel->verified);
@@ -33,8 +33,8 @@ final class ChannelTest extends TestCase
     {
         $page = ChannelPage::fromArray([
             'data' => [
-                ['id' => 1, 'kind' => 'email', 'label' => 'Me', 'verified' => false, 'config' => ['address' => 'a@b.test'], 'created_at' => '2026-01-01T00:00:00+00:00'],
-                ['id' => 2, 'kind' => 'telegram', 'label' => 'TG', 'verified' => true, 'config' => ['chat_id' => '12345'], 'created_at' => '2026-01-02T00:00:00+00:00'],
+                ['id' => '1', 'kind' => 'email', 'label' => 'Me', 'verified' => false, 'config' => ['address' => 'a@b.test'], 'created_at' => '2026-01-01T00:00:00+00:00'],
+                ['id' => '2', 'kind' => 'telegram', 'label' => 'TG', 'verified' => true, 'config' => ['chat_id' => '12345'], 'created_at' => '2026-01-02T00:00:00+00:00'],
             ],
             'total' => 2,
         ]);
@@ -48,11 +48,26 @@ final class ChannelTest extends TestCase
     {
         $this->expectException(\UnexpectedValueException::class);
         Channel::fromArray([
-            'id' => 1,
+            'id' => '1',
             'kind' => 'email',
             'label' => 'Me',
             'verified' => false,
             'config' => 'not-an-object',
+            'created_at' => '2026-01-01T00:00:00+00:00',
+        ]);
+    }
+
+    public function test_channel_id_must_be_a_string(): void
+    {
+        // The backend serializes the channel's BIGINT id as a JSON string; an
+        // int must be rejected rather than silently accepted.
+        $this->expectException(\UnexpectedValueException::class);
+        Channel::fromArray([
+            'id' => 7,
+            'kind' => 'email',
+            'label' => 'Me',
+            'verified' => false,
+            'config' => [],
             'created_at' => '2026-01-01T00:00:00+00:00',
         ]);
     }

@@ -4,10 +4,21 @@ declare(strict_types=1);
 
 namespace CronMonitor\Api;
 
+use CronMonitor\Api\Dto\Account;
+use CronMonitor\Api\Dto\Alert;
+use CronMonitor\Api\Dto\AlertPage;
+use CronMonitor\Api\Dto\Channel;
 use CronMonitor\Api\Dto\ChannelPage;
+use CronMonitor\Api\Dto\ChannelSecret;
+use CronMonitor\Api\Dto\CreateChannelRequest;
 use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\MonitorPage;
+use CronMonitor\Api\Dto\Ping;
+use CronMonitor\Api\Dto\PingPage;
+use CronMonitor\Api\Dto\SnoozeDuration;
+use CronMonitor\Api\Dto\TestChannelResult;
+use CronMonitor\Api\Dto\UpdateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Internal\ExceptionFactory;
@@ -42,7 +53,7 @@ use Psr\Log\NullLogger;
  */
 final class MonitorApiClient
 {
-    private const USER_AGENT = 'cron-monitor-php-sdk/1.0';
+    private const USER_AGENT = 'cron-monitor-php-sdk/1.1';
 
     private const API_PREFIX = '/api/v1';
 
@@ -129,9 +140,7 @@ final class MonitorApiClient
      */
     public function getMonitor(string $uuid): Monitor
     {
-        if (1 !== preg_match(self::UUID_PATTERN, $uuid)) {
-            throw new \InvalidArgumentException(\sprintf('%s is not a valid monitor UUID.', $uuid));
-        }
+        $this->assertUuid($uuid);
 
         $payload = $this->requestJson('GET', '/monitors/'.$uuid, null, true);
 
@@ -139,14 +148,22 @@ final class MonitorApiClient
     }
 
     /**
-     * Create a monitor. Never retried — creates are not idempotent and the
-     * wire contract has no idempotency key, so a retry risks a duplicate.
+     * Create a monitor.
+     *
+     * By default this is **not retried** — a blind replay of a create risks a
+     * duplicate. Supplying an `$idempotencyKey` flips that: the backend dedups
+     * a replay carrying the same key and identical body (returning the original
+     * result), so the create becomes safe to retry, and this method enables the
+     * retry budget when a key is given. Reuse the SAME key for the logical
+     * operation; a different body under the same key is a `409`.
      *
      * @throws ApiException
      */
-    public function createMonitor(CreateMonitorRequest $request): Monitor
+    public function createMonitor(CreateMonitorRequest $request, ?string $idempotencyKey = null): Monitor
     {
-        $payload = $this->requestJson('POST', '/monitors', $request->toArray(), false);
+        [$headers, $retryable] = $this->idempotency($idempotencyKey);
+
+        $payload = $this->requestJson('POST', '/monitors', $request->toArray(), $retryable, $headers);
 
         return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
     }
@@ -193,6 +210,225 @@ final class MonitorApiClient
     }
 
     /**
+     * Apply a partial update (`PATCH`) and return the updated monitor. The
+     * UUID is validated locally and an empty patch is rejected before any
+     * HTTP, mirroring {@see getMonitor}'s fail-fast. Retried: re-applying the
+     * same field values is idempotent, so a replay after a dropped response
+     * is safe.
+     *
+     * @throws ApiException
+     */
+    public function updateMonitor(string $uuid, UpdateMonitorRequest $request): Monitor
+    {
+        $this->assertUuid($uuid);
+        if ($request->isEmpty()) {
+            throw new \InvalidArgumentException('updateMonitor needs at least one field to change.');
+        }
+
+        $payload = $this->requestJson('PATCH', '/monitors/'.$uuid, $request->toArray(), true);
+
+        return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
+    }
+
+    /**
+     * Delete a monitor (the backend answers `204 No Content`). Retried:
+     * deleting is idempotent in effect — the end state is "gone" either way.
+     * The only observable difference on a replay after the server already
+     * processed the first attempt is a `404` (surfaced as
+     * {@see Exception\NotFoundException}) instead of a silent
+     * success.
+     *
+     * @throws ApiException
+     */
+    public function deleteMonitor(string $uuid): void
+    {
+        $this->assertUuid($uuid);
+
+        $this->requestNoContent('DELETE', '/monitors/'.$uuid, null, true);
+    }
+
+    /**
+     * Pause a monitor (no alerts while paused) and return it. Retried:
+     * pausing an already-paused monitor is a no-op, so a replay is safe.
+     *
+     * @throws ApiException
+     */
+    public function pauseMonitor(string $uuid): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/pause', null);
+    }
+
+    /**
+     * Resume a paused monitor and return it. Retried: resuming an already-
+     * running monitor is a no-op, so a replay is safe.
+     *
+     * @throws ApiException
+     */
+    public function resumeMonitor(string $uuid): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/resume', null);
+    }
+
+    /**
+     * Snooze a monitor for a bounded duration and return it. Retried:
+     * re-snoozing extends from "now" again, which is idempotent enough that a
+     * replay after a dropped response is safe (it re-applies the same window).
+     *
+     * @throws ApiException
+     */
+    public function snoozeMonitor(string $uuid, SnoozeDuration $duration): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/snooze', ['duration' => $duration->value]);
+    }
+
+    /**
+     * Clear an active snooze and return the monitor. Retried: unsnoozing an
+     * un-snoozed monitor is a no-op, so a replay is safe.
+     *
+     * @throws ApiException
+     */
+    public function unsnoozeMonitor(string $uuid): Monitor
+    {
+        return $this->transitionMonitor($uuid, '/unsnooze', null);
+    }
+
+    /**
+     * Rotate the monitor's UUID, returning the monitor with its new UUID.
+     *
+     * **Never retried.** Rotation instantly invalidates the old ping URL with
+     * no grace window and is not idempotent: a blind replay would either
+     * rotate a second time or `422` because the echoed confirmation no longer
+     * matches. The backend requires the caller to echo the current UUID as
+     * `confirm`, which this method supplies.
+     *
+     * @throws ApiException
+     */
+    public function rotateMonitorUuid(string $uuid): Monitor
+    {
+        $this->assertUuid($uuid);
+
+        // The backend compares `confirm` with a strict, case-sensitive `!==`
+        // against the canonical lowercase UUID, while assertUuid (and the
+        // backend route) accept any case — so normalise to lowercase or an
+        // uppercase-but-valid UUID would 422 "Rotation must be confirmed".
+        $payload = $this->requestJson('POST', '/monitors/'.$uuid.'/rotate-uuid', ['confirm' => strtolower($uuid)], false);
+
+        return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
+    }
+
+    /**
+     * One page of a monitor's ping history. Pings use opaque **cursor**
+     * (keyset) pagination — pass the previous page's {@see PingPage::$nextCursor}
+     * back as `$cursor`. `$limit` is clamped to [1, 100].
+     *
+     * @throws ApiException
+     */
+    public function listPings(string $uuid, int $limit = self::DEFAULT_LIST_LIMIT, ?string $cursor = null): PingPage
+    {
+        $this->assertUuid($uuid);
+        $limit = max(1, min($limit, self::MAX_LIST_LIMIT));
+
+        $query = ['limit' => $limit];
+        if (null !== $cursor && '' !== $cursor) {
+            $query['cursor'] = $cursor;
+        }
+
+        $payload = $this->requestJson('GET', '/monitors/'.$uuid.'/pings?'.http_build_query($query), null, true);
+
+        return $this->hydrate(static fn (): PingPage => PingPage::fromArray($payload));
+    }
+
+    /**
+     * Lazily walk a monitor's entire ping history across cursor pages. A
+     * generator so deep history does not materialise in memory.
+     *
+     * The walk follows `next_cursor` until it is null. Two defenses bound a
+     * non-conforming endpoint: a **cycle guard** throws
+     * {@see ApiTransportException} if the server hands back the very cursor it
+     * was just given (the keyset analogue of {@see allMonitors()}'s stale-
+     * offset defense), and the {@see MAX_PAGES} cap stops a longer loop.
+     *
+     * @return iterable<Ping>
+     *
+     * @throws ApiException
+     */
+    public function allPings(string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
+    {
+        $pageSize = max(1, min($pageSize, self::MAX_LIST_LIMIT));
+        $cursor = null;
+
+        for ($requests = 0; $requests < self::MAX_PAGES; ++$requests) {
+            $page = $this->listPings($uuid, $pageSize, $cursor);
+
+            foreach ($page->data as $ping) {
+                yield $ping;
+            }
+
+            if (null === $page->nextCursor) {
+                return;
+            }
+            if ($page->nextCursor === $cursor) {
+                throw new ApiTransportException('Ping pagination returned the same cursor it was given; the server may be returning an inconsistent listing.');
+            }
+            $cursor = $page->nextCursor;
+        }
+
+        throw new ApiTransportException(\sprintf('Ping pagination did not terminate within %d pages; the server may be returning an inconsistent listing.', self::MAX_PAGES));
+    }
+
+    /**
+     * One page of a monitor's alert history. Alerts use offset pagination
+     * exactly like {@see listMonitors()}; `$limit` is clamped to [1, 100] and a
+     * negative `$offset` is a programmer error.
+     *
+     * @throws ApiException
+     */
+    public function listAlerts(string $uuid, int $offset = 0, int $limit = self::DEFAULT_LIST_LIMIT): AlertPage
+    {
+        $this->assertUuid($uuid);
+        if ($offset < 0) {
+            throw new \InvalidArgumentException('offset must be >= 0.');
+        }
+        $limit = max(1, min($limit, self::MAX_LIST_LIMIT));
+
+        $payload = $this->requestJson('GET', '/monitors/'.$uuid.'/alerts?'.http_build_query(['offset' => $offset, 'limit' => $limit]), null, true);
+
+        return $this->hydrate(static fn (): AlertPage => AlertPage::fromArray($payload));
+    }
+
+    /**
+     * Lazily walk a monitor's entire alert history across offset pages. The
+     * termination and {@see MAX_PAGES} backstop mirror {@see allMonitors()}
+     * verbatim: the walk stops on a short/empty page and is driven by the
+     * locally-tracked offset, not the server-echoed one.
+     *
+     * @return iterable<Alert>
+     *
+     * @throws ApiException
+     */
+    public function allAlerts(string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
+    {
+        $pageSize = max(1, min($pageSize, self::MAX_LIST_LIMIT));
+        $offset = 0;
+
+        for ($requests = 0; $requests < self::MAX_PAGES; ++$requests) {
+            $page = $this->listAlerts($uuid, $offset, $pageSize);
+            $count = \count($page->data);
+
+            foreach ($page->data as $alert) {
+                yield $alert;
+            }
+
+            if ($count < $pageSize) {
+                return;
+            }
+            $offset += $count;
+        }
+
+        throw new ApiTransportException(\sprintf('Alert pagination did not terminate within %d pages; the server may be returning an inconsistent listing.', self::MAX_PAGES));
+    }
+
+    /**
      * List the caller's notification channels (the channel ids feed
      * {@see CreateMonitorRequest::$channelIds}).
      *
@@ -206,18 +442,219 @@ final class MonitorApiClient
     }
 
     /**
+     * Create a notification channel.
+     *
+     * Like {@see createMonitor}, this is **not retried** by default (a replay
+     * risks a duplicate channel) unless an `$idempotencyKey` is supplied, in
+     * which case the backend dedups the replay and the create becomes
+     * retryable.
+     *
+     * @throws ApiException
+     */
+    public function createChannel(CreateChannelRequest $request, ?string $idempotencyKey = null): Channel
+    {
+        [$headers, $retryable] = $this->idempotency($idempotencyKey);
+
+        $payload = $this->requestJson('POST', '/channels', $request->toArray(), $retryable, $headers);
+
+        return $this->hydrate(static fn (): Channel => Channel::fromArray($payload));
+    }
+
+    /**
+     * Fetch a single channel by id. The masked `config` is returned verbatim
+     * (secrets are redacted server-side).
+     *
+     * @throws ApiException
+     */
+    public function getChannel(string $id): Channel
+    {
+        $this->assertChannelId($id);
+
+        $payload = $this->requestJson('GET', '/channels/'.$id, null, true);
+
+        return $this->hydrate(static fn (): Channel => Channel::fromArray($payload));
+    }
+
+    /**
+     * Rename a channel — the label is the only mutable field (the backend's
+     * policy for a destination change is delete + create). Retried: re-applying
+     * the same label is idempotent.
+     *
+     * @throws ApiException
+     */
+    public function updateChannel(string $id, string $label): Channel
+    {
+        $this->assertChannelId($id);
+        if ('' === trim($label)) {
+            throw new \InvalidArgumentException('Channel label must be a non-empty string.');
+        }
+
+        $payload = $this->requestJson('PATCH', '/channels/'.$id, ['label' => $label], true);
+
+        return $this->hydrate(static fn (): Channel => Channel::fromArray($payload));
+    }
+
+    /**
+     * Delete a channel (the backend answers `204 No Content`). Retried:
+     * deleting is idempotent in effect; a replay after the server already
+     * processed the first attempt surfaces as a `404`.
+     *
+     * @throws ApiException
+     */
+    public function deleteChannel(string $id): void
+    {
+        $this->assertChannelId($id);
+
+        $this->requestNoContent('DELETE', '/channels/'.$id, null, true);
+    }
+
+    /**
+     * Rotate a webhook channel's signing secret, returning the channel plus
+     * the freshly-minted plaintext {@see ChannelSecret::$secret} — which the
+     * backend reveals **once**. Capture it immediately.
+     *
+     * **Never retried.** Rotation is not idempotent: a replay would mint yet
+     * another secret, and the first response (carrying the only copy of the
+     * earlier secret) would be lost. Only webhook channels have a rotatable
+     * secret; any other kind answers `422`.
+     *
+     * @throws ApiException
+     */
+    public function rotateChannelSecret(string $id): ChannelSecret
+    {
+        $this->assertChannelId($id);
+
+        $payload = $this->requestJson('POST', '/channels/'.$id.'/rotate-secret', null, false);
+
+        return $this->hydrate(static fn (): ChannelSecret => ChannelSecret::fromArray($payload));
+    }
+
+    /**
+     * Send a test alert through a channel.
+     *
+     * **Never retried.** A test send has an external side effect (it actually
+     * delivers) and consumes the per-user / per-IP test-send budget, so a
+     * blind replay would double-send and burn rate budget. A well-formed
+     * request whose downstream destination rejected the delivery answers
+     * `502` ({@see Exception\UnexpectedResponseException}); an
+     * unverified or transport-less channel answers `422`.
+     *
+     * @throws ApiException
+     */
+    public function testChannel(string $id): TestChannelResult
+    {
+        $this->assertChannelId($id);
+
+        $payload = $this->requestJson('POST', '/channels/'.$id.'/test', null, false);
+
+        return $this->hydrate(static fn (): TestChannelResult => TestChannelResult::fromArray($payload));
+    }
+
+    /**
+     * The caller's account snapshot: plan, monitor budget, and live API
+     * rate-limit standing in one read — so a client can surface "how close am
+     * I to my limits?" without scraping rate-limit headers across requests.
+     *
+     * @throws ApiException
+     */
+    public function getAccount(): Account
+    {
+        $payload = $this->requestJson('GET', '/account', null, true);
+
+        return $this->hydrate(static fn (): Account => Account::fromArray($payload));
+    }
+
+    /**
+     * Shared path for the POST status transitions (pause / resume / snooze /
+     * unsnooze): validate the UUID locally, POST to the sub-resource, and
+     * hydrate the monitor the backend returns. All are retryable — each is an
+     * idempotent transition whose replay is a no-op.
+     *
+     * @param array<string, mixed>|null $body
+     *
+     * @throws ApiException
+     */
+    private function transitionMonitor(string $uuid, string $subPath, ?array $body): Monitor
+    {
+        $this->assertUuid($uuid);
+
+        $payload = $this->requestJson('POST', '/monitors/'.$uuid.$subPath, $body, true);
+
+        return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
+    }
+
+    /**
+     * Validate a monitor UUID locally before any HTTP request, giving a
+     * friendly error instead of a server `404`.
+     */
+    private function assertUuid(string $uuid): void
+    {
+        if (1 !== preg_match(self::UUID_PATTERN, $uuid)) {
+            throw new \InvalidArgumentException(\sprintf('%s is not a valid monitor UUID.', $uuid));
+        }
+    }
+
+    /**
+     * Validate a channel id locally before any HTTP request. The id is carried
+     * as a string — like {@see Channel::$id}, which the
+     * backend serialises from a Doctrine BIGINT that can exceed PHP's int range
+     * — so a returned `$channel->id` feeds straight back in without a lossy
+     * `(int)` cast. The backend route only matches a run of digits, so anything
+     * that is not a positive decimal integer is a programmer error worth a
+     * friendly local message.
+     */
+    private function assertChannelId(string $id): void
+    {
+        if (1 !== preg_match('/^[1-9]\d*$/', $id)) {
+            throw new \InvalidArgumentException(\sprintf('%s is not a valid channel id (expected a positive integer).', var_export($id, true)));
+        }
+    }
+
+    /**
+     * Translate an optional idempotency key into the request headers and the
+     * retry decision for a create. A supplied key sets the `Idempotency-Key`
+     * header AND makes the create retryable — the backend dedups a replay
+     * carrying the same key and identical body, so a retry can only ever
+     * replay the original result, never create a second resource. With no key
+     * the create stays single-attempt. An empty/blank key is a programmer
+     * error (it would reach the backend as a real, useless key).
+     *
+     * @return array{0: array<string, string>, 1: bool} the extra headers and whether the create is retryable
+     */
+    private function idempotency(?string $idempotencyKey): array
+    {
+        if (null === $idempotencyKey) {
+            return [[], false];
+        }
+        if ('' === trim($idempotencyKey)) {
+            throw new \InvalidArgumentException('Idempotency key, when provided, must be a non-empty string.');
+        }
+        // Reject control characters (notably CR/LF) before they reach the
+        // header: it forecloses header injection and keeps a malformed key a
+        // clean \InvalidArgumentException rather than a PSR-7 throwable leaking
+        // out of buildRequest past the "callers only catch ApiException"
+        // contract.
+        if (1 === preg_match('/[\x00-\x1f\x7f]/', $idempotencyKey)) {
+            throw new \InvalidArgumentException('Idempotency key must not contain control characters.');
+        }
+
+        return [['Idempotency-Key' => $idempotencyKey], true];
+    }
+
+    /**
      * Send a JSON request and return the decoded object body, or throw the
      * mapped {@see ApiException} on any non-2xx / transport / decode failure.
      *
      * @param array<string, mixed>|null $body
+     * @param array<string, string>     $extraHeaders additional request headers (e.g. `Idempotency-Key`)
      *
      * @return array<string, mixed>
      *
      * @throws ApiException
      */
-    private function requestJson(string $method, string $path, ?array $body, bool $retryable): array
+    private function requestJson(string $method, string $path, ?array $body, bool $retryable, array $extraHeaders = []): array
     {
-        $response = $this->send($this->buildRequest($method, $path, $body), $retryable);
+        $response = $this->send($this->buildRequest($method, $path, $body, $extraHeaders), $retryable);
         $status = $response->getStatusCode();
         $rawBody = (string) $response->getBody();
 
@@ -240,11 +677,33 @@ final class MonitorApiClient
     }
 
     /**
+     * Send a request whose success carries no body — a `DELETE`'s `204 No
+     * Content`. Mirrors {@see requestJson}'s non-2xx → {@see ExceptionFactory}
+     * mapping but neither requires nor decodes a JSON body, so requestJson's
+     * "must be a JSON object" invariant stays intact for the endpoints that do
+     * return one.
+     *
      * @param array<string, mixed>|null $body
+     *
+     * @throws ApiException
+     */
+    private function requestNoContent(string $method, string $path, ?array $body, bool $retryable): void
+    {
+        $response = $this->send($this->buildRequest($method, $path, $body), $retryable);
+        $status = $response->getStatusCode();
+
+        if ($status < 200 || $status >= 300) {
+            throw ExceptionFactory::fromResponse($status, ProblemDetails::parse((string) $response->getBody(), $status), $this->retryAfterSeconds($response));
+        }
+    }
+
+    /**
+     * @param array<string, mixed>|null $body
+     * @param array<string, string>     $extraHeaders additional request headers (e.g. `Idempotency-Key`)
      *
      * @throws ApiTransportException when the request body cannot be JSON-encoded
      */
-    private function buildRequest(string $method, string $path, ?array $body): RequestInterface
+    private function buildRequest(string $method, string $path, ?array $body, array $extraHeaders = []): RequestInterface
     {
         $url = rtrim($this->configuration->endpoint, '/').self::API_PREFIX.$path;
 
@@ -254,6 +713,10 @@ final class MonitorApiClient
 
         if (null !== $this->configuration->apiKey) {
             $request = $request->withHeader('Authorization', 'Bearer '.$this->configuration->apiKey);
+        }
+
+        foreach ($extraHeaders as $name => $value) {
+            $request = $request->withHeader($name, $value);
         }
 
         if (null !== $body) {
@@ -279,11 +742,17 @@ final class MonitorApiClient
     }
 
     /**
-     * Send with a bounded retry budget. Idempotent GETs retry on transport
-     * failure and `5xx` within `Configuration::retries`; non-retryable
-     * requests (POST creates) get exactly one attempt. `4xx` and `2xx`
-     * always return immediately for the caller to map. `429` is returned
-     * as-is (not retried) so the caller can read `Retry-After`.
+     * Send with a bounded retry budget. Idempotent GETs (and the idempotent
+     * transitions / keyed creates) retry on transport failure and `5xx` within
+     * `Configuration::retries`; non-retryable requests get exactly one attempt.
+     * `4xx` and `2xx` always return immediately for the caller to map. `429` is
+     * returned as-is (not retried) so the caller can read `Retry-After`.
+     *
+     * The request body is rewound before every attempt: a retried request
+     * carries a body (PATCH, or a keyed create), and a PSR-18 client that
+     * consumed the stream on the first attempt would otherwise send an empty
+     * body on the next — which, for an idempotency-keyed replay, would change
+     * the server-side request fingerprint and defeat dedup.
      *
      * @throws ApiTransportException when every attempt fails at the transport level
      */
@@ -293,6 +762,11 @@ final class MonitorApiClient
         $lastTransport = null;
 
         for ($attempt = 1; $attempt <= $maxAttempts; ++$attempt) {
+            $body = $request->getBody();
+            if ($body->isSeekable()) {
+                $body->rewind();
+            }
+
             try {
                 $response = $this->httpClient->sendRequest($request);
             } catch (ClientExceptionInterface $e) {

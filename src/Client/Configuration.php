@@ -71,6 +71,17 @@ final class Configuration
         if ($retries < 0) {
             throw new \InvalidArgumentException('retries must be >= 0.');
         }
+
+        // A control character (notably CR/LF) in the token would make the
+        // PSR-7 `withHeader('Authorization', ...)` throw deep inside a ping —
+        // breaking the ping client's hard no-throw contract and the API
+        // client's "callers only catch ApiException" contract. Reject it once
+        // here, at construction (host start-up), where a throw is expected, so
+        // a token mistakenly read with a trailing newline can never escape
+        // inside a running cron job.
+        if (null !== $apiKey && 1 === preg_match('/[\x00-\x1f\x7f]/', $apiKey)) {
+            throw new \InvalidArgumentException('API key must not contain control characters (e.g. a trailing newline).');
+        }
     }
 
     public static function withDefaultEndpoint(

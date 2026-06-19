@@ -105,4 +105,21 @@ final class MonitorTest extends TestCase
         $this->expectException(\UnexpectedValueException::class);
         Monitor::fromArray(self::payload(['created_at' => 'not-a-date']));
     }
+
+    public function test_snoozed_until_hydrates_when_present(): void
+    {
+        $monitor = Monitor::fromArray(self::payload(['snoozed_until' => '2026-01-03T09:00:00+00:00']));
+
+        self::assertInstanceOf(\DateTimeImmutable::class, $monitor->snoozedUntil);
+        self::assertSame('2026-01-03T09:00:00+00:00', $monitor->snoozedUntil->format(\DateTimeInterface::RFC3339));
+    }
+
+    public function test_snoozed_until_is_null_when_absent_or_null(): void
+    {
+        // BC guarantee: a response from an older backend without the
+        // snoozed_until key (the default payload here omits it) still parses,
+        // hydrating snoozedUntil to null.
+        self::assertNull(Monitor::fromArray(self::payload())->snoozedUntil);
+        self::assertNull(Monitor::fromArray(self::payload(['snoozed_until' => null]))->snoozedUntil);
+    }
 }

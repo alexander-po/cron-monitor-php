@@ -18,7 +18,7 @@ final class CreateMonitorRequestTest extends TestCase
             scheduleExpr: '0 2 * * *',
             tz: 'Europe/Warsaw',
             graceSeconds: 120,
-            channelIds: [3, 7],
+            channelIds: ['3', '7'],
         );
 
         self::assertSame([
@@ -27,8 +27,17 @@ final class CreateMonitorRequestTest extends TestCase
             'schedule_expr' => '0 2 * * *',
             'tz' => 'Europe/Warsaw',
             'grace_seconds' => 120,
-            'channel_ids' => [3, 7],
+            'channel_ids' => ['3', '7'],
         ], $request->toArray());
+    }
+
+    public function test_int_channel_ids_are_accepted_and_normalised_to_strings(): void
+    {
+        // 1.0.0 callers passed channelIds as ints; that must keep working,
+        // emitting the same string-on-the-wire form the backend accepts.
+        $request = new CreateMonitorRequest('Nightly', ScheduleKind::Cron, '0 2 * * *', channelIds: [3, 7]);
+
+        self::assertSame(['3', '7'], $request->toArray()['channel_ids']);
     }
 
     public function test_defaults_are_utc_sixty_seconds_and_no_channels(): void
@@ -62,6 +71,6 @@ final class CreateMonitorRequestTest extends TestCase
     public function test_rejects_non_positive_channel_id(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new CreateMonitorRequest('Nightly', ScheduleKind::Cron, '0 2 * * *', channelIds: [0]);
+        new CreateMonitorRequest('Nightly', ScheduleKind::Cron, '0 2 * * *', channelIds: ['0']);
     }
 }

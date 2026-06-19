@@ -23,6 +23,17 @@ final class RecordingHttpClient implements ClientInterface
     /** @var list<RequestInterface> */
     public array $requests = [];
 
+    /**
+     * The request body bytes captured per call, read the way a real PSR-18
+     * client streams them out (from the stream's current position, without a
+     * courtesy rewind). This is what makes the retry body-survival assertion
+     * meaningful: if the client under test failed to rewind between attempts,
+     * the second entry here would come back empty.
+     *
+     * @var list<string>
+     */
+    public array $bodies = [];
+
     /** @var list<ResponseInterface|\Throwable> */
     private array $queue;
 
@@ -37,6 +48,7 @@ final class RecordingHttpClient implements ClientInterface
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
         $this->requests[] = $request;
+        $this->bodies[] = $request->getBody()->getContents();
 
         if ([] === $this->queue) {
             throw new \LogicException('RecordingHttpClient queue is empty.');

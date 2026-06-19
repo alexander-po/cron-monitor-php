@@ -121,7 +121,16 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ScheduleInventory::class)
         ->args([tagged_iterator('scheduler.schedule_provider')]);
 
+    // The API client + Configuration are injected so `--apply` / `--dry-run`
+    // can reconcile against the management API. Both are ignoreOnInvalid: a
+    // project without a bound PSR-18 client still gets the default list/snippet
+    // mode (which touches no network); only the reconcile modes need them, and
+    // the command errors with guidance when they are absent.
     $services->set(SyncCommand::class)
-        ->args([service(ScheduleInventory::class)])
+        ->args([
+            service(ScheduleInventory::class),
+            service(MonitorApiClient::class)->ignoreOnInvalid(),
+            service(Configuration::class)->ignoreOnInvalid(),
+        ])
         ->tag('console.command');
 };

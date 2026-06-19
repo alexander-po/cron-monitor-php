@@ -372,6 +372,85 @@ In Symfony the client is autowired (`MonitorApiClient`); in Laravel it
 is a container singleton (`app(MonitorApiClient::class)`). Both read the
 token from the same `api_key` config you already set.
 
+### The full management surface (1.1.0)
+
+1.1.0 rounds the client out to the backend's whole `/api/v1` surface.
+Everything is additive — the 1.0.0 calls above are unchanged.
+
+```php
+use CronMonitor\Api\Dto\CreateChannelRequest;
+use CronMonitor\Api\Dto\SnoozeDuration;
+use CronMonitor\Api\Dto\UpdateMonitorRequest;
+
+// Edit / pause / resume / snooze / delete a monitor (by UUID).
+$api->updateMonitor($uuid, new UpdateMonitorRequest(graceSeconds: 300));
+$api->pauseMonitor($uuid);
+$api->resumeMonitor($uuid);
+$api->snoozeMonitor($uuid, SnoozeDuration::OneDay);
+$api->deleteMonitor($uuid);          // 204, returns void
+
+// Rotate a monitor's UUID (kills the old ping URL immediately).
+$rotated = $api->rotateMonitorUuid($uuid);
+
+// History: pings are cursor-paginated, alerts are offset-paginated.
+foreach ($api->allPings($uuid) as $ping) {
+    printf("%s  %s  %sms\n", $ping->kind->value, $ping->receivedAt->format('c'), $ping->runtimeMs ?? '-');
+}
+foreach ($api->allAlerts($uuid) as $alert) {
+    printf("%s  %s\n", $alert->kind->value, $alert->createdAt->format('c'));
+}
+
+// Channels: create / rename / delete / test / rotate the signing secret.
+// Channel ids are strings (the backend id is a BIGINT) — pass $channel->id straight back.
+$channel = $api->createChannel(CreateChannelRequest::email('Ops inbox', 'ops@example.com'));
+$api->updateChannel($channel->id, 'Renamed');
+$result = $api->testChannel($channel->id);   // sends a real test alert
+$secret = $api->rotateChannelSecret($webhookChannelId);  // plaintext returned ONCE
+
+// Account: plan, monitor budget and live rate-limit standing in one read.
+$account = $api->getAccount();
+printf("Plan %s — %d/%d monitors used\n", $account->plan->key->value, $account->monitorBudget->used, $account->plan->monitorLimit);
+```
+
+**Retries are per-verb.** Reads and idempotent transitions
+(PATCH / DELETE / pause / resume / snooze) retry within
+`Configuration::retries`; creates, UUID/secret rotation and channel tests
+never auto-retry, because a blind replay would duplicate, re-rotate, or
+double-send. To make a create safe to retry, pass an idempotency key — the
+backend dedups a replay carrying the same key and body:
+
+```php
+$api->createMonitor($request, idempotencyKey: 'deploy-2026-06-19-nightly');
+```
+
+### Auto-creating monitors from your scheduler
+
+The `cron-monitor:sync` command (Symfony and Laravel) lists your scheduled
+jobs. By default it just prints the config snippet to wire UUIDs by hand —
+no credentials, no network. With `--apply` it reconciles those jobs against
+your account by name and **creates the missing ones** via the API:
+
+```bash
+# Preview what would be created (lists your monitors, writes nothing):
+bin/console cron-monitor:sync --dry-run            # Symfony
+php artisan cron-monitor:sync --dry-run            # Laravel
+
+# Actually create the missing monitors, optionally routing them to a channel:
+bin/console cron-monitor:sync --apply --channel=7
+```
+
+Reconciliation is **by name**, so renaming a job creates a second monitor
+rather than renaming the first — rename on the dashboard too, or delete the
+orphan. Two jobs that share a name are reported as a `conflict` and neither
+is created (give them distinct names). `--apply` / `--dry-run` need an API
+key; only cron-expressed jobs are auto-created (interval/closure jobs are
+reported skipped — create those by hand).
+
+The Laravel bridge carries each event's timezone into the created monitor.
+The Symfony Scheduler exposes no per-trigger timezone, so Symfony-synced
+monitors are created in **UTC** — if a Symfony schedule runs in another
+zone, set the monitor's timezone on the dashboard after creating it.
+
 ## Configuration knobs
 
 | Setting                    | Default                  | Notes |

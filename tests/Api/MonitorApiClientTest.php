@@ -151,7 +151,7 @@ final class MonitorApiClientTest extends TestCase
         $factory = new HttpFactory();
         $client = new MonitorApiClient(new Configuration('https://cronheart.com', apiKey: 'cmk_x'), $http, $factory, $factory);
 
-        $request = new CreateMonitorRequest('Nightly report', ScheduleKind::Cron, '0 2 * * *', channelIds: [3]);
+        $request = new CreateMonitorRequest('Nightly report', ScheduleKind::Cron, '0 2 * * *', channelIds: ['3']);
         $monitor = $client->createMonitor($request);
 
         self::assertSame(self::UUID, $monitor->uuid);
@@ -350,6 +350,30 @@ final class MonitorApiClientTest extends TestCase
 
             self::assertCount(1, $page->data);
             self::assertSame('Smoke monitor', $page->data[0]->name);
+        } finally {
+            $server->stop();
+        }
+    }
+
+    public function test_get_account_round_trips_against_a_real_server(): void
+    {
+        $server = LocalHttpServer::start();
+        if (null === $server) {
+            self::markTestSkipped('LocalHttpServer could not boot in this environment.');
+        }
+
+        try {
+            $client = MonitorApiClient::create(new Configuration(
+                $server->baseUrl(),
+                apiKey: 'cmk_smoke',
+                allowInsecureEndpoint: true,
+            ));
+
+            $account = $client->getAccount();
+
+            self::assertSame('Starter', $account->plan->label);
+            self::assertSame(47, $account->monitorBudget->remaining);
+            self::assertSame(119, $account->apiRateLimit->remaining);
         } finally {
             $server->stop();
         }

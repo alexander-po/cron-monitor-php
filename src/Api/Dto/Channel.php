@@ -17,6 +17,9 @@ use CronMonitor\Api\Internal\Hydrator;
  * `config` is whatever the backend returns for the channel's transport
  * settings, with secret credentials already masked server-side (e.g.
  * webhook URLs / secrets come back as `***`). It is stored verbatim.
+ *
+ * `id` is the backend's BIGINT identifier carried as a string (it can exceed
+ * PHP's int range), matching the API's serialized type.
  */
 final class Channel
 {
@@ -24,7 +27,7 @@ final class Channel
      * @param array<string, mixed> $config
      */
     public function __construct(
-        public readonly int $id,
+        public readonly string $id,
         public readonly string $kind,
         public readonly string $label,
         public readonly bool $verified,
@@ -47,7 +50,7 @@ final class Channel
         /** @var array<string, mixed> $config */
 
         return new self(
-            Hydrator::int($data, 'id'),
+            Hydrator::string($data, 'id'),
             Hydrator::string($data, 'kind'),
             Hydrator::string($data, 'label'),
             Hydrator::bool($data, 'verified'),
