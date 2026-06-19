@@ -117,7 +117,7 @@ final class SyncCommand extends Command
 
                 return self::INVALID;
             }
-            $channelId = (int) $rawChannel;
+            $channelId = $rawChannel;
         }
 
         // Closure / unnamed events have no stable command name (describeCommand

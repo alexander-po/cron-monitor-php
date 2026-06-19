@@ -13,12 +13,14 @@ namespace CronMonitor\Api\Dto;
  *
  * `channelIds` follows the backend's "presence replaces routing" rule: pass
  * null to leave channel routing as-is, or an array (including the empty array)
- * to replace it — `[]` clears all channels.
+ * to replace it — `[]` clears all channels. Ids may be ints or strings; pass
+ * a returned {@see Channel::$id} (a string) straight back in.
  */
 final class UpdateMonitorRequest
 {
     /**
-     * @param list<int>|null $channelIds
+     * @param list<int|string>|null $channelIds ints (back-compatible) or strings; pass a
+     *                                          returned {@see Channel::$id} directly
      */
     public function __construct(
         public readonly ?string $name = null,
@@ -39,8 +41,8 @@ final class UpdateMonitorRequest
         }
         if (null !== $channelIds) {
             foreach ($channelIds as $id) {
-                if (!\is_int($id) || $id <= 0) {
-                    throw new \InvalidArgumentException('channelIds, when provided, must be a list of positive integers.');
+                if (!CreateMonitorRequest::isPositiveChannelId($id)) {
+                    throw new \InvalidArgumentException('channelIds, when provided, must be a list of positive channel ids (int or numeric string, e.g. Channel::$id).');
                 }
             }
         }
@@ -79,7 +81,7 @@ final class UpdateMonitorRequest
             $body['grace_seconds'] = $this->graceSeconds;
         }
         if (null !== $this->channelIds) {
-            $body['channel_ids'] = array_values($this->channelIds);
+            $body['channel_ids'] = array_values(array_map(static fn (int|string $id): string => (string) $id, $this->channelIds));
         }
 
         return $body;

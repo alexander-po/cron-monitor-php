@@ -17,7 +17,11 @@ namespace CronMonitor\Api\Dto;
 final class CreateMonitorRequest
 {
     /**
-     * @param list<int> $channelIds notification channel ids to attach (see {@see Channel})
+     * @param list<int|string> $channelIds notification channel ids to attach. Accepts ints
+     *                                     (back-compatible with 1.0.0) or strings; pass a
+     *                                     returned {@see Channel::$id} (a string, since the
+     *                                     backend's id is a BIGINT) to route without a lossy
+     *                                     `(int)` cast. Normalised to strings on the wire.
      */
     public function __construct(
         public readonly string $name,
@@ -37,14 +41,23 @@ final class CreateMonitorRequest
             throw new \InvalidArgumentException('graceSeconds must be >= 0.');
         }
         foreach ($channelIds as $id) {
-            if (!\is_int($id) || $id <= 0) {
-                throw new \InvalidArgumentException('channelIds must be a list of positive integers.');
+            if (!self::isPositiveChannelId($id)) {
+                throw new \InvalidArgumentException('channelIds must be a list of positive channel ids (int or numeric string, e.g. Channel::$id).');
             }
         }
     }
 
     /**
-     * @return array{name: string, schedule_kind: string, schedule_expr: string, tz: string, grace_seconds: int, channel_ids: list<int>}
+     * A positive channel id, whether given as an int (>= 1) or a numeric string
+     * (no sign, no leading zero) like the {@see Channel::$id} the API returns.
+     */
+    public static function isPositiveChannelId(int|string $id): bool
+    {
+        return \is_int($id) ? $id >= 1 : 1 === preg_match('/^[1-9]\d*$/', $id);
+    }
+
+    /**
+     * @return array{name: string, schedule_kind: string, schedule_expr: string, tz: string, grace_seconds: int, channel_ids: list<string>}
      */
     public function toArray(): array
     {
@@ -54,7 +67,7 @@ final class CreateMonitorRequest
             'schedule_expr' => $this->scheduleExpr,
             'tz' => $this->tz,
             'grace_seconds' => $this->graceSeconds,
-            'channel_ids' => array_values($this->channelIds),
+            'channel_ids' => array_values(array_map(static fn (int|string $id): string => (string) $id, $this->channelIds)),
         ];
     }
 }

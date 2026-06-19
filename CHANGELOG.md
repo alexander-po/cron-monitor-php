@@ -57,9 +57,13 @@ creates missing monitors. **No breaking changes** — code written against
   BIGINT id as a JSON string); the 1.0.0 `int` typing would have thrown on
   every real `listChannels()` response. The channel-by-id methods
   (`getChannel`, `updateChannel`, `deleteChannel`, `rotateChannelSecret`,
-  `testChannel`) take the id as a `string` to match, so a returned
-  `$channel->id` feeds straight back in without a lossy `(int)` cast that
-  would corrupt a BIGINT beyond PHP's int range.
+  `testChannel`) take the id as a `string` to match, and
+  `CreateMonitorRequest`/`UpdateMonitorRequest::$channelIds` now accept
+  `int|string` (normalised to a string on the wire) — so a returned
+  `$channel->id` feeds straight back in (to fetch, mutate, or route a
+  monitor) without a lossy `(int)` cast that would corrupt a BIGINT beyond
+  PHP's int range. Passing channel ids as ints stays valid, so existing
+  1.0.0 `createMonitor` callers keep working.
 
 ## [1.0.0] — 2026-06-09
 

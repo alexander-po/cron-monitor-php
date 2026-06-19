@@ -180,10 +180,10 @@ final class MonitorReconcilerTest extends TestCase
         ]);
         $reconciler = $this->reconciler($http);
 
-        $reconciler->reconcile([new ReconcilableJob('App\\Cron\\Hourly', '0 * * * *')], apply: true, channelId: 5);
+        $reconciler->reconcile([new ReconcilableJob('App\\Cron\\Hourly', '0 * * * *')], apply: true, channelId: '5');
 
         $body = json_decode((string) $http->bodies[1], true);
-        self::assertSame([5], $body['channel_ids']);
+        self::assertSame(['5'], $body['channel_ids']);
     }
 
     public function test_apply_continues_after_a_single_create_failure(): void

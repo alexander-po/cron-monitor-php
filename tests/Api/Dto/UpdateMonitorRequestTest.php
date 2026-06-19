@@ -19,9 +19,9 @@ final class UpdateMonitorRequestTest extends TestCase
 
     public function test_to_array_maps_schedule_kind_and_channels(): void
     {
-        $req = new UpdateMonitorRequest(scheduleKind: ScheduleKind::Interval, scheduleExpr: '300', channelIds: [3, 4]);
+        $req = new UpdateMonitorRequest(scheduleKind: ScheduleKind::Interval, scheduleExpr: '300', channelIds: ['3', '4']);
 
-        self::assertSame(['schedule_kind' => 'interval', 'schedule_expr' => '300', 'channel_ids' => [3, 4]], $req->toArray());
+        self::assertSame(['schedule_kind' => 'interval', 'schedule_expr' => '300', 'channel_ids' => ['3', '4']], $req->toArray());
     }
 
     public function test_is_empty_when_no_fields_are_set(): void
@@ -59,6 +59,6 @@ final class UpdateMonitorRequestTest extends TestCase
     public function test_non_positive_channel_id_is_rejected(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new UpdateMonitorRequest(channelIds: [0]);
+        new UpdateMonitorRequest(channelIds: ['0']);
     }
 }

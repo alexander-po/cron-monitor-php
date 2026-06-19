@@ -48,7 +48,7 @@ final class MonitorReconciler
      *                      throw: it is captured as a {@see ReconcileOutcome::Failed}
      *                      result so the remaining jobs still reconcile.
      */
-    public function reconcile(array $jobs, bool $apply, ?int $channelId = null, int $graceSeconds = 60): array
+    public function reconcile(array $jobs, bool $apply, ?string $channelId = null, int $graceSeconds = 60): array
     {
         $existing = $this->existingByName();
 
@@ -109,7 +109,7 @@ final class MonitorReconciler
     /**
      * @throws ApiException
      */
-    private function create(ReconcilableJob $job, ?int $channelId, int $graceSeconds): Monitor
+    private function create(ReconcilableJob $job, ?string $channelId, int $graceSeconds): Monitor
     {
         $request = new CreateMonitorRequest(
             $job->name,

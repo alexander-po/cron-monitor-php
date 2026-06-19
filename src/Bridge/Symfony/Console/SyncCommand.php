@@ -123,7 +123,7 @@ final class SyncCommand extends Command
 
                 return Command::INVALID;
             }
-            $channelId = (int) $channelOption;
+            $channelId = $channelOption;
         }
 
         // Only cron-triggered jobs can be auto-created: the management API

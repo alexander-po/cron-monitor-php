@@ -151,7 +151,7 @@ final class MonitorApiClientTest extends TestCase
         $factory = new HttpFactory();
         $client = new MonitorApiClient(new Configuration('https://cronheart.com', apiKey: 'cmk_x'), $http, $factory, $factory);
 
-        $request = new CreateMonitorRequest('Nightly report', ScheduleKind::Cron, '0 2 * * *', channelIds: [3]);
+        $request = new CreateMonitorRequest('Nightly report', ScheduleKind::Cron, '0 2 * * *', channelIds: ['3']);
         $monitor = $client->createMonitor($request);
 
         self::assertSame(self::UUID, $monitor->uuid);
