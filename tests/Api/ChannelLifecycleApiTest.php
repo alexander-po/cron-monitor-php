@@ -6,6 +6,8 @@ namespace CronMonitor\Tests\Api;
 
 use CronMonitor\Api\Dto\Channel;
 use CronMonitor\Api\Dto\CreateChannelRequest;
+use CronMonitor\Api\Exception\ApiException;
+use CronMonitor\Api\Exception\ChannelDeliveryException;
 use CronMonitor\Api\Exception\NotFoundException;
 use CronMonitor\Api\Exception\UnexpectedResponseException;
 use CronMonitor\Api\Exception\ValidationException;
@@ -227,7 +229,7 @@ final class ChannelLifecycleApiTest extends TestCase
         self::assertSame('https://cronheart.com/api/v1/channels/7/test', (string) $sent->getUri());
     }
 
-    public function test_test_channel_maps_502_delivery_failure(): void
+    public function test_test_channel_maps_502_to_channel_delivery_exception(): void
     {
         $http = new RecordingHttpClient([self::jsonResponse(502, [
             'title' => 'Bad Gateway',
@@ -238,7 +240,29 @@ final class ChannelLifecycleApiTest extends TestCase
         try {
             $client->testChannel('7');
             self::fail('Expected an exception.');
+        } catch (ChannelDeliveryException $e) {
+            self::assertSame(502, $e->statusCode);
+            self::assertSame('Test delivery failed. Check the destination configuration.', $e->detail);
+            $previous = $e->getPrevious();
+            self::assertInstanceOf(UnexpectedResponseException::class, $previous);
+            self::assertNotInstanceOf(ChannelDeliveryException::class, $previous);
+            self::assertSame(502, $previous->statusCode);
+        }
+    }
+
+    public function test_test_channel_502_stays_catchable_as_unexpected_response(): void
+    {
+        $http = new RecordingHttpClient([self::jsonResponse(502, [
+            'detail' => 'Test delivery failed. Check the destination configuration.',
+        ])]);
+        $client = $this->client($http);
+
+        try {
+            $client->testChannel('7');
+            self::fail('Expected an exception.');
         } catch (UnexpectedResponseException $e) {
+            self::assertInstanceOf(ChannelDeliveryException::class, $e);
+            self::assertInstanceOf(ApiException::class, $e);
             self::assertSame(502, $e->statusCode);
         }
     }
@@ -264,6 +288,7 @@ final class ChannelLifecycleApiTest extends TestCase
             self::fail('Expected an exception.');
         } catch (UnexpectedResponseException $e) {
             self::assertSame(503, $e->statusCode);
+            self::assertNotInstanceOf(ChannelDeliveryException::class, $e);
         }
         self::assertCount(1, $http->requests, 'a test send must not be retried');
     }
