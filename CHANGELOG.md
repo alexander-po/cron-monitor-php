@@ -8,6 +8,30 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.2.0] — 2026-06-28
+
+A small, additive consumer-DX release. **No breaking changes** — code
+written against 1.1.0 keeps working unchanged.
+
+### Added
+
+- **`CronMonitor\Api\Exception\ChannelDeliveryException`** — a dedicated
+  exception for the channel-test `502`. `MonitorApiClient::testChannel()`
+  now raises it when the test send reaches the backend cleanly but the
+  downstream destination rejects or fails the delivery, so a consumer can
+  tell "the destination rejected the test" apart from any other bad gateway
+  without inspecting the status code. It **extends
+  `UnexpectedResponseException`** (the type that 502 was already mapped to),
+  so existing `catch (UnexpectedResponseException)` / `catch (ApiException)`
+  handling keeps working — a strictly additive narrowing, not a breaking
+  change. Only `testChannel()` raises it; a 502 from any other endpoint
+  stays a plain `UnexpectedResponseException`, and an unverified or
+  transport-less channel still answers `422` (`ValidationException`).
+
+### Changed
+
+- Both clients now report `User-Agent: cron-monitor-php-sdk/1.2`.
+
 ## [1.1.0] — 2026-06-19
 
 A feature release rounding the management-API client out to the backend's

@@ -404,13 +404,22 @@ foreach ($api->allAlerts($uuid) as $alert) {
 // Channel ids are strings (the backend id is a BIGINT) — pass $channel->id straight back.
 $channel = $api->createChannel(CreateChannelRequest::email('Ops inbox', 'ops@example.com'));
 $api->updateChannel($channel->id, 'Renamed');
-$result = $api->testChannel($channel->id);   // sends a real test alert
+$result = $api->testChannel($channel->id);   // sends a real test alert (see "Channel-test outcomes")
 $secret = $api->rotateChannelSecret($webhookChannelId);  // plaintext returned ONCE
 
 // Account: plan, monitor budget and live rate-limit standing in one read.
 $account = $api->getAccount();
 printf("Plan %s — %d/%d monitors used\n", $account->plan->key->value, $account->monitorBudget->used, $account->plan->monitorLimit);
 ```
+
+**Channel-test outcomes (1.2.0).** A test actually delivers. When the
+request reaches the backend cleanly but the destination rejects or fails
+the delivery, `testChannel()` throws `ChannelDeliveryException` carrying
+HTTP 502 — a subclass of `UnexpectedResponseException`, so any
+`catch (UnexpectedResponseException)` / `catch (ApiException)` written
+against 1.1.0 still catches it; catch the narrower type to tell a failed
+destination delivery apart from any other bad gateway. An unverified or
+transport-less channel throws `ValidationException` (HTTP 422) instead.
 
 **Retries are per-verb.** Reads and idempotent transitions
 (PATCH / DELETE / pause / resume / snooze) retry within
