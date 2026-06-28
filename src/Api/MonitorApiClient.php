@@ -21,6 +21,8 @@ use CronMonitor\Api\Dto\TestChannelResult;
 use CronMonitor\Api\Dto\UpdateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\Exception\ApiTransportException;
+use CronMonitor\Api\Exception\ChannelDeliveryException;
+use CronMonitor\Api\Exception\UnexpectedResponseException;
 use CronMonitor\Api\Internal\ExceptionFactory;
 use CronMonitor\Api\Internal\ProblemDetails;
 use CronMonitor\Client\Configuration;
@@ -536,8 +538,11 @@ final class MonitorApiClient
      * delivers) and consumes the per-user / per-IP test-send budget, so a
      * blind replay would double-send and burn rate budget. A well-formed
      * request whose downstream destination rejected the delivery answers
-     * `502` ({@see Exception\UnexpectedResponseException}); an
-     * unverified or transport-less channel answers `422`.
+     * `502`, surfaced as {@see ChannelDeliveryException} — a
+     * {@see UnexpectedResponseException} subclass, so existing
+     * `catch (UnexpectedResponseException)` handling still catches it; an
+     * unverified or transport-less channel answers `422`
+     * ({@see Exception\ValidationException}).
      *
      * @throws ApiException
      */
@@ -545,7 +550,19 @@ final class MonitorApiClient
     {
         $this->assertChannelId($id);
 
-        $payload = $this->requestJson('POST', '/channels/'.$id.'/test', null, false);
+        try {
+            $payload = $this->requestJson('POST', '/channels/'.$id.'/test', null, false);
+        } catch (UnexpectedResponseException $e) {
+            // A 502 here specifically means the test reached the backend but
+            // the downstream destination rejected/failed the delivery. Narrow
+            // only that status to ChannelDeliveryException; any other bad
+            // gateway (or 5xx) stays the generic parent the factory produced.
+            if (502 === $e->statusCode) {
+                throw new ChannelDeliveryException($e->getMessage(), $e->statusCode, $e->detail, $e->title, $e);
+            }
+
+            throw $e;
+        }
 
         return $this->hydrate(static fn (): TestChannelResult => TestChannelResult::fromArray($payload));
     }
