@@ -130,7 +130,7 @@ not a file path:
 | Channel kinds         | `src/Api/Dto/ChannelKind.php` (request-side) | backend `ChannelKind` enum                              |
 | Plan keys             | `src/Api/Dto/PlanKey.php` (`free/starter/growth/scale`) | backend `Plan` enum                          |
 | BIGINT ids as strings | `Ping`/`Alert`/`Channel` `$id` (`string`)   | backend serialises Doctrine BIGINT `getId()` as JSON string |
-| 204 / 502 contract    | `requestNoContent()` (204); 502 → `UnexpectedResponseException` | backend DELETE routes; channel-test bad-gateway (502) |
+| 204 / 502 contract    | `requestNoContent()` (204); generic 502 → `UnexpectedResponseException`, `testChannel()` 502 → `ChannelDeliveryException` (subclass) | backend DELETE routes; channel-test bad-gateway (502) |
 | `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | backend idempotency guard (full-body fingerprint)         |
 
 ## What this SDK does NOT do
@@ -153,10 +153,13 @@ Don't add these without explicit design discussion:
   lifecycle (create / get / rename / delete / rotate-secret / test),
   `getAccount`, and optional `Idempotency-Key` on creates. The bridge
   `cron-monitor:sync` also gained `--apply` (create missing monitors via
-  the shared `src/Sync/MonitorReconciler`). See README "Managing monitors
-  via the API". Still deferred to a later minor: surfacing
-  `Idempotency-Replayed`, and a distinct `ChannelDeliveryException` for the
-  502 channel-test failure (today it is `UnexpectedResponseException`).
+  the shared `src/Sync/MonitorReconciler`). 1.2.0 added
+  `ChannelDeliveryException`: `testChannel()`'s 502 (downstream delivery
+  failed) now rethrows this `UnexpectedResponseException` subclass, while
+  `ExceptionFactory` stays generic — a 502 from any other endpoint is still
+  a plain `UnexpectedResponseException`. See README "Managing monitors via
+  the API". Still deferred to a later minor: surfacing
+  `Idempotency-Replayed`.
 - Bundled framework version pins. Composer constraints stay loose
   (`^6.4 || ^7.0` for Symfony, `^10.0 || ^11.0` for Laravel); the
   user's app pins.
