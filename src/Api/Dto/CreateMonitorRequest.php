@@ -19,7 +19,8 @@ final class CreateMonitorRequest
     /**
      * @param list<int|string> $channelIds notification channel ids to attach. Accepts ints
      *                                     (back-compatible with 1.0.0) or strings; pass a
-     *                                     returned {@see Channel::$id} (a string, since the
+     *                                     returned {@see Channel::$id} / {@see MonitorChannel::$id}
+     *                                     (a string, since the
      *                                     backend's id is a BIGINT) to route without a lossy
      *                                     `(int)` cast. Normalised to strings on the wire.
      */

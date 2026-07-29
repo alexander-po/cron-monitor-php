@@ -129,7 +129,8 @@ not a file path:
 | Snooze durations      | `src/Api/Dto/SnoozeDuration.php` (`1h/4h/1d/1w`) | backend `SnoozeDuration` enum                        |
 | Channel kinds         | `src/Api/Dto/ChannelKind.php` (request-side) | backend `ChannelKind` enum                              |
 | Plan keys             | `src/Api/Dto/PlanKey.php` (`free/starter/growth/scale`) | backend `Plan` enum                          |
-| BIGINT ids as strings | `Ping`/`Alert`/`Channel` `$id` (`string`)   | backend serialises Doctrine BIGINT `getId()` as JSON string |
+| BIGINT ids as strings | `Ping`/`Alert`/`Channel`/`MonitorChannel` `$id` (`string`) | backend serialises Doctrine BIGINT `getId()` as JSON string |
+| Monitor alert routing | `Monitor::$channels` → `MonitorChannel` (`id`/`kind`/`label`) | backend embeds the same slim projection in its monitor payload, ordered by channel id (live 2026-07-29); older deployments omit the key, so hydration tolerates it missing or null |
 | 204 / 502 contract    | `requestNoContent()` (204); generic 502 → `UnexpectedResponseException`, `testChannel()` 502 → `ChannelDeliveryException` (subclass) | backend DELETE routes; channel-test bad-gateway (502) |
 | `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | backend idempotency guard (full-body fingerprint)         |
 
@@ -157,7 +158,12 @@ Don't add these without explicit design discussion:
   `ChannelDeliveryException`: `testChannel()`'s 502 (downstream delivery
   failed) now rethrows this `UnexpectedResponseException` subclass, while
   `ExceptionFactory` stays generic — a 502 from any other endpoint is still
-  a plain `UnexpectedResponseException`. See README "Managing monitors via
+  a plain `UnexpectedResponseException`. 1.3.0 made monitor **reads** report
+  alert routing — `Monitor::$channels` as a list of `MonitorChannel`
+  (`id`/`kind`/`label`), so routing can be confirmed after a write, diffed
+  against a spec, or copied between monitors; it reports attachment, not
+  deliverability, and an empty list must never be fed straight back into
+  `channelIds` (that clears routing). See README "Managing monitors via
   the API". Still deferred to a later minor: surfacing
   `Idempotency-Replayed`.
 - Bundled framework version pins. Composer constraints stay loose

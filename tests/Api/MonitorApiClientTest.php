@@ -6,6 +6,7 @@ namespace CronMonitor\Tests\Api;
 
 use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Dto\Monitor;
+use CronMonitor\Api\Dto\MonitorChannel;
 use CronMonitor\Api\Dto\ScheduleKind;
 use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Exception\AuthenticationException;
@@ -94,6 +95,38 @@ final class MonitorApiClientTest extends TestCase
         self::assertSame('Bearer cmk_test_token', $request->getHeaderLine('Authorization'));
         self::assertSame('application/json', $request->getHeaderLine('Accept'));
         self::assertStringContainsString('cron-monitor-php-sdk', $request->getHeaderLine('User-Agent'));
+    }
+
+    public function test_routing_surfaces_through_both_get_and_list(): void
+    {
+        // The seam the field exists for: whichever read a caller uses, it must
+        // be able to see which channels the monitor alerts.
+        // array_merge, not `+`: the union operator keeps the LEFT operand on a
+        // key collision, so the override would silently no-op if the shared
+        // fixture ever gained a `channels` key.
+        $row = array_merge(self::monitorRow(), ['channels' => [['id' => '3', 'kind' => 'telegram', 'label' => 'ops-bot']]]);
+
+        $fetched = $this->client([self::jsonResponse(200, $row)])->getMonitor(self::UUID);
+        self::assertSame(['3'], array_map(static fn (MonitorChannel $c): string => $c->id, $fetched->channels));
+        self::assertSame('ops-bot', $fetched->channels[0]->label);
+
+        $listed = $this->client([self::jsonResponse(200, [
+            'data' => [$row],
+            'total' => 1,
+            'limit' => 50,
+            'offset' => 0,
+        ])])->listMonitors();
+        self::assertSame('ops-bot', $listed->data[0]->channels[0]->label);
+    }
+
+    public function test_a_monitor_read_from_a_backend_without_routing_still_parses(): void
+    {
+        // `monitorRow()` carries no `channels` key, matching a deployment that
+        // predates the routing-reads release — the read must not fail.
+        self::assertArrayNotHasKey('channels', self::monitorRow(), 'this case rests on the shared fixture omitting the key');
+        $monitor = $this->client([self::jsonResponse(200, self::monitorRow())])->getMonitor(self::UUID);
+
+        self::assertSame([], $monitor->channels);
     }
 
     public function test_list_monitors_clamps_limit_to_max(): void

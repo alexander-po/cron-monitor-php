@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Tests\Api;
 
 use CronMonitor\Api\Dto\Monitor;
+use CronMonitor\Api\Dto\MonitorChannel;
 use CronMonitor\Api\Dto\SnoozeDuration;
 use CronMonitor\Api\Dto\UpdateMonitorRequest;
 use CronMonitor\Api\Exception\NotFoundException;
@@ -77,6 +78,25 @@ final class MonitorLifecycleApiTest extends TestCase
         self::assertSame('https://cronheart.com/api/v1/monitors/'.self::UUID, (string) $sent->getUri());
         self::assertSame('Bearer cmk_test_token', $sent->getHeaderLine('Authorization'));
         self::assertSame(['name' => 'Renamed', 'grace_seconds' => 120], json_decode((string) $sent->getBody(), true));
+    }
+
+    public function test_a_write_response_carries_the_resulting_routing(): void
+    {
+        // "Confirm a write without a follow-up read" is the headline reason
+        // this field exists, and a write response is the one place that claim
+        // is load-bearing — so pin it on the verb that changes routing.
+        $http = new RecordingHttpClient([self::jsonResponse(200, self::monitorRow(['channels' => [
+            ['id' => '3', 'kind' => 'telegram', 'label' => 'ops-bot'],
+            ['id' => '11', 'kind' => 'slack', 'label' => 'deploys'],
+        ]]))]);
+
+        $monitor = $this->client($http)->updateMonitor(self::UUID, new UpdateMonitorRequest(channelIds: ['3', '11']));
+
+        self::assertSame(
+            ['3:telegram', '11:slack'],
+            array_map(static fn (MonitorChannel $c): string => $c->id.':'.$c->kind, $monitor->channels),
+        );
+        self::assertSame(['channel_ids' => ['3', '11']], json_decode((string) $http->requests[0]->getBody(), true));
     }
 
     public function test_update_monitor_rejects_empty_patch_without_http(): void
