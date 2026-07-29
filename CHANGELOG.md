@@ -8,6 +8,54 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.3.0] — 2026-07-29
+
+An additive read-surface release: a monitor now reports the notification
+channels it alerts, so routing can be confirmed, diffed and copied instead of
+only written. **No breaking changes** — code written against 1.2.0 keeps
+working unchanged.
+
+### Added
+
+
+- **`Monitor::$channels`** — a monitor read now exposes its alert routing:
+  which notification channels it delivers to, as a list of the new
+  **`CronMonitor\Api\Dto\MonitorChannel`** (`id`, `kind`, `label`), in the id
+  order the backend sends. Available wherever a `Monitor` comes back —
+  `getMonitor()`, `listMonitors()` / `allMonitors()`, and every write response
+  (`createMonitor()`, `updateMonitor()`, the lifecycle verbs). Previously the
+  SDK could *set* `channelIds` but never read back what a monitor actually
+  routes to, so a caller could not confirm a write, diff a monitor against a
+  desired spec, or copy one monitor's routing onto another. `MonitorChannel::$id`
+  is a string, exactly what `CreateMonitorRequest` / `UpdateMonitorRequest`
+  accept as a `channelIds` entry, so that copy needs no conversion.
+
+  It reports what is **attached, not what will be delivered.** Attachment is
+  necessary but not sufficient — verification, an active snooze, a paused
+  monitor and an operator's per-kind switch each suppress delivery on their
+  own, so a non-empty list is not a promise that an alert reaches anyone.
+  `Channel::$verified` plus `Monitor::$snoozedUntil` / `$status` narrow it
+  down; `Alert::$dispatchedTo` is the only per-channel evidence of an actual
+  send. Correspondingly, **never feed an empty `channels` straight into
+  `UpdateMonitorRequest::$channelIds`** — an empty `channel_ids` replaces the
+  target's routing with none, so copying from a monitor that reports none
+  would leave the target alerting nobody (the README snippet guards this).
+  `kind` is a plain string (like `Channel::$kind`) so a channel kind added
+  server-side can never make a monitor read unhydratable; that tolerance
+  covers the vocabulary, not the types — a wrongly-typed field still fails
+  the read loudly.
+
+  **No breaking changes.** The constructor parameter is appended and defaults
+  to `[]`, so positional callers are unaffected, and a response that omits the
+  key entirely hydrates to an empty list instead of failing — which keeps this
+  release working against a backend that predates the field, and against an
+  idempotent create replaying a response body stored before it. Live on
+  cronheart.com since 2026-07-29.
+
+### Changed
+
+- Both clients now report `User-Agent: cron-monitor-php-sdk/1.3`.
+
 ## [1.2.0] — 2026-06-28
 
 A small, additive consumer-DX release. **No breaking changes** — code

@@ -14,7 +14,8 @@ namespace CronMonitor\Api\Dto;
  * `channelIds` follows the backend's "presence replaces routing" rule: pass
  * null to leave channel routing as-is, or an array (including the empty array)
  * to replace it — `[]` clears all channels. Ids may be ints or strings; pass
- * a returned {@see Channel::$id} (a string) straight back in.
+ * a returned {@see Channel::$id} or {@see MonitorChannel::$id} (both strings)
+ * straight back in.
  */
 final class UpdateMonitorRequest
 {

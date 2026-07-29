@@ -412,6 +412,46 @@ $account = $api->getAccount();
 printf("Plan %s — %d/%d monitors used\n", $account->plan->key->value, $account->monitorBudget->used, $account->plan->monitorLimit);
 ```
 
+**Reading a monitor's alert routing (1.3.0).** Every monitor a read returns carries
+`channels` — the notification channels it alerts, in the backend's id order:
+
+```php
+use CronMonitor\Api\Dto\MonitorChannel;
+use CronMonitor\Api\Dto\UpdateMonitorRequest;
+
+$monitor = $api->getMonitor($uuid);
+foreach ($monitor->channels as $channel) {
+    printf("%s (%s)\n", $channel->label, $channel->kind);
+}
+
+// Copy one monitor's routing onto another: MonitorChannel::$id is exactly what
+// channelIds accepts, so nothing needs converting.
+//
+// Guard the empty case. `channel_ids: []` is not a no-op — it REPLACES the
+// target's routing with none, so copying from a monitor that reports no
+// channels would leave the target alerting nobody.
+if ([] !== $monitor->channels) {
+    $api->updateMonitor($otherUuid, new UpdateMonitorRequest(
+        channelIds: array_map(static fn (MonitorChannel $c): string => $c->id, $monitor->channels),
+    ));
+}
+```
+
+An empty `channels` means the monitor alerts nobody — there is no fan-out —
+or that the backend predates this field, which older deployments omit
+entirely (as does an idempotent create replaying a body stored before it).
+The two are indistinguishable, which is exactly why the guard above matters.
+
+Note the field reports what is **attached, not what gets delivered**.
+Attachment is necessary but not sufficient: the backend also skips a channel
+that isn't verified, any delivery while the monitor is snoozed or paused, and
+a channel kind an operator has switched off. So don't read "non-empty
+`channels`" as "alerts will land" — `Channel::$verified`
+(`$api->getChannel($channel->id)`) plus `Monitor::$snoozedUntil` / `$status`
+narrow it down, and `Alert::$dispatchedTo` on a past alert is the only
+per-channel evidence of an actual send. `MonitorChannel` is a slim view
+(`id`, `kind`, `label`); fetch the channel itself for `verified` and `config`.
+
 **Channel-test outcomes (1.2.0).** A test actually delivers. When the
 request reaches the backend cleanly but the destination rejects or fails
 the delivery, `testChannel()` throws `ChannelDeliveryException` carrying
