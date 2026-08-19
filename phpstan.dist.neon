@@ -3,6 +3,9 @@ parameters:
     paths:
         - src
         - tests
+        # Named explicitly: the file has no .php extension, so listing the
+        # directory finds nothing. Its breakage is exactly what went unnoticed.
+        - bin/cron-monitor
     excludePaths:
         # Symfony DI configurator scripts use the global `service()`,
         # `tagged_iterator()`, etc. helpers that exist only after the DI

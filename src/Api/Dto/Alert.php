@@ -9,9 +9,11 @@ use CronMonitor\Api\Internal\Hydrator;
 /**
  * A single alert in a monitor's history (`GET /api/v1/monitors/{uuid}/alerts`).
  *
- * `dispatchedTo` is whatever the backend returns describing where the alert
+ * `dispatchedTo` is whatever the server returns describing where the alert
  * was routed (or null if it was not dispatched); it is stored verbatim, like
- * {@see Channel::$config}.
+ * {@see Channel::$config}. `kind` is the enum case when the SDK knows the
+ * value and the server's verbatim string when it does not, so a kind added
+ * server-side cannot make a history page unreadable.
  */
 final class Alert
 {
@@ -20,7 +22,7 @@ final class Alert
      */
     public function __construct(
         public readonly string $id,
-        public readonly AlertKind $kind,
+        public readonly AlertKind|string $kind,
         public readonly \DateTimeImmutable $createdAt,
         public readonly ?array $dispatchedTo,
     ) {
@@ -41,7 +43,7 @@ final class Alert
 
         return new self(
             Hydrator::string($data, 'id'),
-            Hydrator::enum(AlertKind::class, $data, 'kind'),
+            Hydrator::openEnum(AlertKind::class, $data, 'kind'),
             Hydrator::dateTime($data, 'created_at'),
             $dispatchedTo,
         );

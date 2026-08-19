@@ -9,10 +9,12 @@ use CronMonitor\Api\Internal\Hydrator;
 /**
  * A notification channel (email / telegram / slack / discord / webhook).
  *
- * `kind` is kept as a plain string rather than an enum: the set of channel
- * kinds is the most likely part of the API to grow, and the SDK does not
- * branch on it, so an enum would add parse-fragility for no consumer
- * benefit.
+ * `kind` is a plain string rather than an `Enum|string` like the other open
+ * vocabularies ({@see MonitorStatus}). Channel kinds are the part of the API
+ * most likely to grow, the SDK never branches on one, and every consumer that
+ * has ever read this field has read a string — so narrowing it now would break
+ * them to express something they do not use. Compare it against
+ * {@see ChannelKind}'s values when you need to.
  *
  * `config` is whatever the backend returns for the channel's transport
  * settings, with secret credentials already masked server-side (e.g.

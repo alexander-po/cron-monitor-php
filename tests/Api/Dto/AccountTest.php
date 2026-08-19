@@ -27,16 +27,6 @@ final class AccountTest extends TestCase
         self::assertSame(119, $account->apiRateLimit->remaining);
     }
 
-    public function test_account_unknown_plan_key_is_a_contract_violation(): void
-    {
-        $this->expectException(\UnexpectedValueException::class);
-        Account::fromArray([
-            'plan' => ['key' => 'enterprise', 'label' => 'Enterprise', 'monitor_limit' => 9999],
-            'monitor_budget' => ['used' => 0, 'limit' => 0, 'remaining' => 0],
-            'api_rate_limit' => ['limit' => 0, 'remaining' => 0],
-        ]);
-    }
-
     public function test_account_missing_nested_object_is_a_contract_violation(): void
     {
         $this->expectException(\UnexpectedValueException::class);

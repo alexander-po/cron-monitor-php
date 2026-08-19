@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace CronMonitor\Tests\Api;
 
 use CronMonitor\Api\Dto\PlanKey;
-use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Tests\Support\RecordingHttpClient;
@@ -78,14 +77,16 @@ final class AccountApiTest extends TestCase
         self::assertCount(2, $http->requests);
     }
 
-    public function test_get_account_rejects_unknown_plan_key(): void
+    public function test_get_account_tolerates_an_unknown_plan_key(): void
     {
-        // A plan key the SDK enum does not know must surface as a wrapped
-        // contract violation, never a silently-accepted unknown value.
+        // A tier the SDK enum does not know must not take the whole account
+        // read down with it — the caller reading `monitorBudget` cares nothing
+        // about which tier string arrived.
         $http = new RecordingHttpClient([self::jsonResponse(200, self::accountBody('enterprise'))]);
         $client = $this->client($http);
 
-        $this->expectException(ApiTransportException::class);
-        $client->getAccount();
+        $account = $client->getAccount();
+
+        self::assertSame('enterprise', $account->plan->key);
     }
 }

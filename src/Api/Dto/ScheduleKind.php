@@ -7,10 +7,9 @@ namespace CronMonitor\Api\Dto;
 /**
  * How a monitor's schedule is expressed.
  *
- * Mirrors the backend's `schedule_kind` enum. The set is foundational and
- * not expected to grow, so {@see Monitor::fromArray()} parses it strictly:
- * an unrecognised value is treated as a contract violation rather than
- * silently coerced.
+ * A kind added server-side arrives at {@see Monitor::$scheduleKind} as its
+ * raw string rather than failing the read. Writing one still takes a real
+ * case, so a value the SDK only passed through cannot be written back.
  */
 enum ScheduleKind: string
 {

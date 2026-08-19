@@ -8,11 +8,15 @@ use CronMonitor\Api\Internal\Hydrator;
 
 /**
  * The account's plan tier and its monitor allowance (part of {@see Account}).
+ *
+ * `key` is the enum case when the SDK knows the tier and the server's
+ * verbatim string when it does not, so a tier added server-side cannot make
+ * the account unreadable.
  */
 final class Plan
 {
     public function __construct(
-        public readonly PlanKey $key,
+        public readonly PlanKey|string $key,
         public readonly string $label,
         public readonly int $monitorLimit,
     ) {
@@ -26,7 +30,7 @@ final class Plan
     public static function fromArray(array $data): self
     {
         return new self(
-            Hydrator::enum(PlanKey::class, $data, 'key'),
+            Hydrator::openEnum(PlanKey::class, $data, 'key'),
             Hydrator::string($data, 'label'),
             Hydrator::int($data, 'monitor_limit'),
         );

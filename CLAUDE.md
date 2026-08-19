@@ -133,6 +133,7 @@ not a file path:
 | Monitor alert routing | `Monitor::$channels` → `MonitorChannel` (`id`/`kind`/`label`) | backend embeds the same slim projection in its monitor payload, ordered by channel id (live 2026-07-29); older deployments omit the key, so hydration tolerates it missing or null |
 | 204 / 502 contract    | `requestNoContent()` (204); generic 502 → `UnexpectedResponseException`, `testChannel()` 502 → `ChannelDeliveryException` (subclass) | backend DELETE routes; channel-test bad-gateway (502) |
 | `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | backend idempotency guard (full-body fingerprint)         |
+| Log digest for a UUID | `CronMonitorClient::hashUuid()` (`substr(sha256(lowercased uuid), 0, 16)`) | the same truncated digest the backend logs — the two streams join on it, so the input form must stay identical on both sides |
 
 ## What this SDK does NOT do
 

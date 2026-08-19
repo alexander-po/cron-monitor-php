@@ -45,12 +45,6 @@ final class AlertTest extends TestCase
         Alert::fromArray(['id' => 8, 'kind' => 'fail', 'created_at' => '2026-06-10T05:00:00+00:00', 'dispatched_to' => null]);
     }
 
-    public function test_alert_unknown_kind_is_a_contract_violation(): void
-    {
-        $this->expectException(\UnexpectedValueException::class);
-        Alert::fromArray(['id' => '8', 'kind' => 'warned', 'created_at' => '2026-06-10T05:00:00+00:00', 'dispatched_to' => null]);
-    }
-
     public function test_alert_page_offset_pagination_reports_has_more(): void
     {
         $page = AlertPage::fromArray([

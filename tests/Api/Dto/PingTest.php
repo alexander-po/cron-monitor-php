@@ -41,12 +41,6 @@ final class PingTest extends TestCase
         Ping::fromArray(['id' => 254, 'kind' => 'heartbeat', 'received_at' => '2026-06-09T12:00:00+00:00', 'runtime_ms' => null]);
     }
 
-    public function test_ping_unknown_kind_is_a_contract_violation(): void
-    {
-        $this->expectException(\UnexpectedValueException::class);
-        Ping::fromArray(['id' => '1', 'kind' => 'pong', 'received_at' => '2026-06-09T12:00:00+00:00', 'runtime_ms' => null]);
-    }
-
     public function test_ping_page_exposes_cursor_and_has_more(): void
     {
         $page = PingPage::fromArray([

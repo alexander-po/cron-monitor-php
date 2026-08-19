@@ -25,6 +25,7 @@ use CronMonitor\Api\Exception\ChannelDeliveryException;
 use CronMonitor\Api\Exception\UnexpectedResponseException;
 use CronMonitor\Api\Internal\ExceptionFactory;
 use CronMonitor\Api\Internal\ProblemDetails;
+use CronMonitor\Api\Internal\SecretRedactor;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CurlPsr18Client;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -55,7 +56,7 @@ use Psr\Log\NullLogger;
  */
 final class MonitorApiClient
 {
-    private const USER_AGENT = 'cron-monitor-php-sdk/1.3';
+    private const USER_AGENT = 'cron-monitor-php-sdk/1.4';
 
     private const API_PREFIX = '/api/v1';
 
@@ -71,14 +72,6 @@ final class MonitorApiClient
      * that never returns a short/empty page.
      */
     private const MAX_PAGES = 10000;
-
-    /**
-     * Canonical UUID v4 shape. Intentionally a private copy of the literal
-     * in {@see Configuration::pingUrl()} rather than a shared constant: this
-     * keeps the API layer from touching the ping client's `Configuration`
-     * at all. If the canonical pattern ever changes, change both.
-     */
-    private const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
     public function __construct(
         private readonly Configuration $configuration,
@@ -606,7 +599,7 @@ final class MonitorApiClient
      */
     private function assertUuid(string $uuid): void
     {
-        if (1 !== preg_match(self::UUID_PATTERN, $uuid)) {
+        if (1 !== preg_match('/^'.SecretRedactor::UUID_PATTERN.'$/i', $uuid)) {
             throw new \InvalidArgumentException(\sprintf('%s is not a valid monitor UUID.', $uuid));
         }
     }
@@ -799,13 +792,37 @@ final class MonitorApiClient
             return $response;
         }
 
+        $route = self::routeOf($request);
+
         $this->logger->warning('cron-monitor API request failed at transport level', [
             'method' => $request->getMethod(),
-            'uri' => (string) $request->getUri(),
+            'route' => $route,
             'attempts' => $maxAttempts,
         ]);
 
-        throw new ApiTransportException(\sprintf('cron-monitor API request to %s failed: %s', (string) $request->getUri(), null !== $lastTransport ? $lastTransport->getMessage() : 'unknown transport error'), null, null, null, $lastTransport);
+        throw new ApiTransportException(\sprintf('cron-monitor API request to %s %s failed: %s', $request->getMethod(), $route, null !== $lastTransport ? SecretRedactor::redact($lastTransport->getMessage()) : 'unknown transport error'), null, null, null, $lastTransport);
+    }
+
+    /**
+     * The route a request took, with identifier segments replaced by their
+     * placeholder. A monitor UUID in the path is the bearer credential for
+     * that monitor's ping endpoint, and this string travels into exception
+     * messages — the most copy-pasted strings in software, landing in issue
+     * trackers and chat threads long after the incident. Text quoted from
+     * elsewhere goes through {@see SecretRedactor} instead.
+     */
+    private static function routeOf(RequestInterface $request): string
+    {
+        $segments = explode('/', $request->getUri()->getPath());
+        foreach ($segments as $index => $segment) {
+            if (1 === preg_match('/^'.SecretRedactor::UUID_PATTERN.'$/i', $segment)) {
+                $segments[$index] = '{uuid}';
+            } elseif (1 === preg_match('/^\d+$/', $segment)) {
+                $segments[$index] = '{id}';
+            }
+        }
+
+        return implode('/', $segments);
     }
 
     private function retryAfterSeconds(ResponseInterface $response): ?int

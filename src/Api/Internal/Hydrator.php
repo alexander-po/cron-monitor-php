@@ -127,22 +127,24 @@ final class Hydrator
     }
 
     /**
+     * A vocabulary field: the matching enum case when the SDK knows the value,
+     * the server's verbatim string when it does not — a value added
+     * server-side must not break the read for every installed SDK version at
+     * once. The tolerance covers the vocabulary only: a field of the wrong
+     * JSON type still fails the read, via {@see string()}.
+     *
      * @template T of \BackedEnum
      *
      * @param array<string, mixed> $data
      * @param class-string<T>      $enumClass
      *
-     * @return T
+     * @return T|string
      */
-    public static function enum(string $enumClass, array $data, string $key): \BackedEnum
+    public static function openEnum(string $enumClass, array $data, string $key): \BackedEnum|string
     {
         $raw = self::string($data, $key);
-        $case = $enumClass::tryFrom($raw);
-        if (null === $case) {
-            throw new \UnexpectedValueException(\sprintf('Unexpected value %s for field "%s".', var_export($raw, true), $key));
-        }
 
-        return $case;
+        return $enumClass::tryFrom($raw) ?? $raw;
     }
 
     private static function parseTimestamp(string $value, string $key): \DateTimeImmutable

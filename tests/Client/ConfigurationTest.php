@@ -109,4 +109,30 @@ final class ConfigurationTest extends TestCase
         // Path traversal attempt — must be rejected before being concatenated.
         $config->pingUrl('00000000-0000-4000-a000-000000000000', '../admin');
     }
+
+    public function test_constructor_rejects_an_api_key_over_plain_http(): void
+    {
+        // The insecure escape hatch exists for anonymous ping-only self-hosted
+        // installs, where the per-monitor UUID is the only credential on the
+        // wire. A `cmk_...` token is account-wide, and putting one in cleartext
+        // is a different order of mistake — so the two may not be combined.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('API key');
+
+        new Configuration('http://cron.internal', apiKey: 'cmk_live_token', allowInsecureEndpoint: true);
+    }
+
+    public function test_constructor_accepts_plain_http_without_an_api_key(): void
+    {
+        $config = new Configuration('http://cron.internal', allowInsecureEndpoint: true);
+
+        self::assertNull($config->apiKey);
+    }
+
+    public function test_constructor_accepts_an_api_key_over_https_with_the_insecure_flag_set(): void
+    {
+        $config = new Configuration('https://cron.internal', apiKey: 'cmk_live_token', allowInsecureEndpoint: true);
+
+        self::assertSame('cmk_live_token', $config->apiKey);
+    }
 }
