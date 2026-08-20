@@ -20,7 +20,7 @@ final class ConfigurationTest extends TestCase
     {
         $input = [
             'commands' => [
-                'app:short-links:purge-disabled' => '5ae7082c-4f16-11f1-9578-3a3d746059db',
+                'app:short-links:purge-disabled' => '33333333-3333-3333-3333-333333333333',
                 'app:reports:nightly' => '11111111-1111-1111-1111-111111111111',
             ],
         ];
@@ -29,7 +29,7 @@ final class ConfigurationTest extends TestCase
 
         self::assertSame(
             [
-                'app:short-links:purge-disabled' => '5ae7082c-4f16-11f1-9578-3a3d746059db',
+                'app:short-links:purge-disabled' => '33333333-3333-3333-3333-333333333333',
                 'app:reports:nightly' => '11111111-1111-1111-1111-111111111111',
             ],
             $processed['commands'],
