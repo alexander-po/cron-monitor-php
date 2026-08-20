@@ -75,18 +75,6 @@ final class MonitorTest extends TestCase
         self::assertSame(123456, (int) $monitor->createdAt->format('u'));
     }
 
-    public function test_unknown_status_is_a_contract_violation(): void
-    {
-        $this->expectException(\UnexpectedValueException::class);
-        Monitor::fromArray(self::payload(['status' => 'degraded']));
-    }
-
-    public function test_unknown_schedule_kind_is_a_contract_violation(): void
-    {
-        $this->expectException(\UnexpectedValueException::class);
-        Monitor::fromArray(self::payload(['schedule_kind' => 'quartz']));
-    }
-
     public function test_missing_required_field_is_a_contract_violation(): void
     {
         $payload = self::payload();

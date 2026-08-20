@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Api\Dto;
 
 /**
- * A monitor's health state, as computed by the backend's scanner.
+ * A monitor's health state, as computed by the server's scanner.
  *
  *  - `New`    — created, no ping received yet; the scanner does not alert
  *               on the first miss.
@@ -14,10 +14,11 @@ namespace CronMonitor\Api\Dto;
  *  - `Down`   — an explicit `fail` ping was received.
  *  - `Paused` — user-disabled; the scanner skips it.
  *
- * Parsed strictly (see {@see Monitor::fromArray()}). The five states are
- * stable; if the backend ever introduces a sixth, that is a deliberate
- * contract change warranting an SDK bump rather than a value the SDK
- * silently swallows.
+ * A sixth state added server-side arrives at {@see Monitor::$status} as its
+ * raw string rather than failing the read — a new state must not take down
+ * every installed SDK version at once, least of all for callers that never
+ * branch on it. Test with `instanceof` (or `match` with a default) before
+ * acting on the value.
  */
 enum MonitorStatus: string
 {

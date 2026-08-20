@@ -19,6 +19,13 @@ final class Configuration
 {
     public const DEFAULT_ENDPOINT = 'https://cronheart.com';
 
+    /**
+     * Canonical UUID v4 shape, unanchored so it serves both the whole-string
+     * check in {@see pingUrl()} and the substring sweep the ping client runs
+     * over text a transport quoted back.
+     */
+    public const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+
     public const DEFAULT_TIMEOUT_SECONDS = 5.0;
 
     /**
@@ -64,6 +71,14 @@ final class Configuration
             throw new \InvalidArgumentException(\sprintf('Refusing to use plain HTTP endpoint %s. Pass allowInsecureEndpoint: true to override (self-hosted only).', $endpoint));
         }
 
+        // The insecure escape hatch is scoped to anonymous ping-only installs,
+        // where the per-monitor UUID is the only thing on the wire. A `cmk_...`
+        // token authenticates the whole account, so no flag makes sending one
+        // in cleartext a decision the caller gets to opt into.
+        if (null !== $apiKey && 'https' !== $scheme) {
+            throw new \InvalidArgumentException(\sprintf('Refusing to send an API key to plain HTTP endpoint %s.', $endpoint));
+        }
+
         if ($timeoutSeconds <= 0.0) {
             throw new \InvalidArgumentException('timeoutSeconds must be > 0.');
         }
@@ -99,8 +114,12 @@ final class Configuration
      */
     public function pingUrl(string $monitorUuid, ?string $action = null): string
     {
-        if (1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $monitorUuid)) {
-            throw new \InvalidArgumentException(\sprintf('%s is not a valid cron-monitor UUID.', $monitorUuid));
+        // The identifier is deliberately not echoed: this message reaches a
+        // log record and a PingResult, and a value that merely fails the
+        // anchored match can still contain a real UUID (a stray space, a
+        // trailing newline out of a config file).
+        if (1 !== preg_match('/^'.self::UUID_PATTERN.'$/i', $monitorUuid)) {
+            throw new \InvalidArgumentException('The monitor identifier is not a valid cron-monitor UUID.');
         }
 
         $base = rtrim($this->endpoint, '/').'/ping/'.$monitorUuid;
@@ -108,11 +127,10 @@ final class Configuration
             return $base;
         }
 
-        // Mirror the server's route requirement: `action: [a-zA-Z0-9_-]{1,16}`
-        // (see `cron-monitor` backend `PingController::action()` route
-        // attribute). A client-side reject is friendlier than a server 404 and
-        // also defends against accidental path-injection if a future caller
-        // ever read the action segment from user input.
+        // Mirror the server's own route requirement for the action segment
+        // (`[a-zA-Z0-9_-]{1,16}`). A client-side reject is friendlier than a
+        // server 404 and also defends against accidental path-injection if a
+        // future caller ever read the action segment from user input.
         if (1 !== preg_match('/^[a-z0-9_-]{1,16}$/i', $action)) {
             throw new \InvalidArgumentException(\sprintf('%s is not a valid ping action.', $action));
         }

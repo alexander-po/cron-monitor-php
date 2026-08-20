@@ -6,7 +6,133 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet — open a PR and add your entry under the appropriate subsection._
+Hardening pass over the SDK's own core. **Two changes are breaking** — both are
+marked below, and each removes something that could not be kept without
+defeating the fix it belongs to. Everything else is additive or internal.
+
+### Security
+
+- **The ping client no longer writes the monitor UUID to the host's logs.** On
+  the ping endpoint that UUID is the only credential — whoever holds it can post
+  any state for that monitor — and it was logged verbatim on both the failure
+  warning and the bad-identifier error, where it outlives the job and travels
+  wherever logs are shipped. Both records now carry `monitor_uuid_hash`: the
+  first 16 hex characters of the value's SHA-256, the same digest the server
+  logs, so an SDK line and a server line still join on one monitor during an
+  incident. The digest is taken over the lower-cased value, because the ping URL
+  accepts a UUID case-insensitively while the server stores one canonical
+  spelling — without that, two call sites naming the same monitor would land
+  under two unrelated keys. The format is now recorded in the wire-anchor table,
+  since it joins two log streams and cannot move on one side alone.
+
+- **Credentials are stripped from text the SDK quotes back.** PSR-18 clients
+  routinely append the failing request URI to their own exception message, and
+  for a ping that URI *is* the credential; a transport that echoes request
+  headers would carry the `cmk_…` token the same way. Both are now removed
+  before that text reaches a log record or `PingResult::$errorMessage`. The UUID
+  pass runs only for a well-formed identifier, so a short or malformed one
+  cannot rewrite the diagnostic an operator needs to read.
+
+- **The management client reports the route it called, not the resolved path.**
+  `ApiTransportException`'s message and the transport-failure log line carried
+  `/api/v1/monitors/<uuid>` in full, and an exception message is the most
+  copy-pasted string in software — it lands in issue trackers and chat threads
+  long after the incident. Both now read `/api/v1/monitors/{uuid}` (and
+  `/channels/{id}`). Rendering any `ApiException` — `(string) $e`, string
+  interpolation, most framework error pages — redacts UUIDs and API tokens
+  across the whole `previous` chain, so a transport exception one level down can
+  no longer re-expose what the top-level message hides. `getPrevious()` itself is
+  unchanged and still returns the original throwable, message intact, for
+  callers that branch on its type. The log context key changed from `uri` to
+  `route`.
+
+- **BREAKING — an API key may no longer be combined with a plain-HTTP
+  endpoint.** `allowInsecureEndpoint: true` exists for anonymous ping-only
+  self-hosted installs, where the per-monitor UUID is the only thing on the wire;
+  it silently extended to `cmk_…` tokens, which authenticate the whole account.
+  Any non-`https` endpoint with an API key set is now an
+  `InvalidArgumentException` at construction. Insecure **ping-only** installs are
+  unaffected.
+
+  *Upgrading:* if you run `endpoint: http://…` together with `api_key`, that
+  configuration stops booting. Terminate TLS in front of the service and point
+  the SDK at `https://`, or drop the token and use the SDK for pings only. Under
+  Laravel the failure surfaces late — the configuration is built lazily inside a
+  singleton the `monitor()` macro resolves — so the throw lands during
+  `schedule:run` and aborts the whole scheduled run, not at boot. Check this
+  before deploying, not after.
+
+### Fixed
+
+- **The no-throw contract now holds against a non-conforming stack.** The ping
+  client caught only `ClientExceptionInterface`, so a PSR-18 implementation that
+  let a `\RuntimeException` or a `\TypeError` escape broke the host job — the
+  exact class of failure this SDK exists to flag. Message construction (the
+  PSR-17 request and stream factories) sat outside the guarded region
+  altogether, and so did the final `warning` call, so a factory that threw, or a
+  host logger with a full disk, did the same. All of those paths now fold into a
+  logged warning plus a `PingResult::failed(...)`, and a transport that throws
+  outside PSR-18 consumes its retry budget rather than aborting on attempt one.
+  Because fail-open means an SDK bug of ours never surfaces a stack trace, the
+  catch-all logs `error_class` so one can still be told from a hostile transport.
+
+- **`vendor/bin/cron-monitor` works on a plain `composer require` install.** The
+  CLI hard-required `guzzlehttp/guzzle`, which is only a dev dependency, so it
+  exited 64 for every consumer who installed the package normally — while the
+  README promised `composer require` was the only step. It now sends over the
+  bundled cURL transport the SDK has shipped since 0.2.0. Its usage text also
+  still advertised the pre-rebrand domain; the default endpoint is now read from
+  `Configuration::DEFAULT_ENDPOINT`, so it cannot drift again. `ext-curl` is
+  declared in `suggest`, and `bin/cron-monitor` is now analysed by PHPStan
+  alongside the rest of the package — it had been outside the gate, which is
+  much of why this survived.
+
+- **Body truncation no longer emits invalid UTF-8.** The 10 000-byte cap was
+  applied with `substr`, which counts bytes: a multi-byte character straddling
+  the cut went out as a lone lead byte, leaving the excerpt undecodable for
+  everything downstream that expects text. The slice now backs off to a
+  code-point boundary before the marker is appended, and stays at or under the
+  cap. A body that was never valid UTF-8 — captured stderr need not be text — is
+  still capped rather than rejected, and is returned byte-for-byte.
+
+### Added
+
+- **`CronMonitor\Api\Dto\Vocabulary::value()`** — the wire string of an open
+  vocabulary field, whichever half it arrived as. `Vocabulary::value($monitor->status)`
+  returns `'up'` for a value this SDK knows and `'quarantined'` for one it does
+  not, which is what display and logging want; narrow with `instanceof` when the
+  *behaviour* differs.
+
+### Changed
+
+- **BREAKING — vocabulary is open on read, closed on write.** `Hydrator` returned
+  an enum case or threw, so a single status added server-side would have broken
+  every `getMonitor()` call in every installed version — including for callers
+  that never look at the field. `Monitor::$status`, `Monitor::$scheduleKind`,
+  `Ping::$kind`, `Alert::$kind` and `Plan::$key` are now typed `Enum|string` and
+  carry the server's verbatim string when the SDK does not recognise it. That is
+  the tolerance `Channel::$kind` already had, promoted to a rule. Writing is
+  unchanged and still strict: a request DTO takes nothing but a real enum case,
+  so a value the SDK merely passed through cannot travel back out as if it were
+  understood. A field of the wrong *type* still fails the read loudly.
+
+  *Upgrading:* a value this SDK knows is still the same enum case, so `===`
+  checks and existing `match` arms keep working. What changes is the unknown
+  case, and it is a **runtime** difference, not only a static-analysis one:
+  `$monitor->status->value` warns and yields `null` (an `ErrorException` under
+  Laravel's or Symfony's error handler) — use `Vocabulary::value()`; passing the
+  property to a parameter typed as the enum raises a `TypeError`; and a `match`
+  without a `default` raises `\UnhandledMatchError`. Each of those replaces a
+  read that previously threw `ApiTransportException`, so the failure moves rather
+  than appears. The quieter case worth checking deliberately: `=== MonitorStatus::Up`
+  is simply `false` for an unknown status, so an `else` branch that means "down"
+  will now misclassify instead of failing — the deliberate trade for not breaking
+  every read at once.
+
+- Both clients now report `User-Agent: cron-monitor-php-sdk/1.4`. A test pins
+  the two constants to each other and to the package's declared branch alias —
+  nothing previously kept them in step, and a missed bump would have had one
+  client under-reporting its version indefinitely.
 
 ## [1.3.0] — 2026-07-29
 

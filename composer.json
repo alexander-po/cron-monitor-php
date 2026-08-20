@@ -50,6 +50,7 @@
         "symfony/scheduler": "Required to auto-register Symfony Scheduler runs as monitors.",
         "symfony/http-client": "Optional PSR-18 client; the Symfony bundle prefers it if present (the SDK ships a built-in cURL transport otherwise).",
         "illuminate/console": "Required to use the Laravel scheduler macros and sync command.",
+        "ext-curl": "Required by the bundled cURL transport, which CronMonitorClient::create() and vendor/bin/cron-monitor use. Not needed if you inject your own PSR-18 client.",
         "guzzlehttp/guzzle": "Optional PSR-18 client for connection pooling or advanced HTTP needs. Not required — the SDK ships a built-in cURL transport."
     },
     "autoload": {
@@ -67,7 +68,7 @@
     ],
     "extra": {
         "branch-alias": {
-            "dev-main": "1.3.x-dev"
+            "dev-main": "1.4.x-dev"
         },
         "laravel": {
             "providers": [

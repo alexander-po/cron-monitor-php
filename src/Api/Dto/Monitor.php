@@ -23,6 +23,12 @@ use CronMonitor\Api\Internal\Hydrator;
  * non-empty list is not a promise that an alert reaches anyone (see
  * {@see MonitorChannel}).
  *
+ * `scheduleKind` and `status` are vocabulary fields: the enum case when the
+ * SDK knows the value, the server's verbatim string when it does not, so a
+ * state added server-side cannot make a monitor unreadable. That tolerance
+ * covers the vocabulary, not the types — a wrongly-typed field still fails
+ * the read loudly.
+ *
  * Fields added after 1.0.0 are appended in release order and defaulted, so
  * adding one stays binary-compatible for existing positional callers, and a
  * response from a backend that predates the field (older deployments /
@@ -43,11 +49,11 @@ final class Monitor
     public function __construct(
         public readonly string $uuid,
         public readonly string $name,
-        public readonly ScheduleKind $scheduleKind,
+        public readonly ScheduleKind|string $scheduleKind,
         public readonly string $scheduleExpr,
         public readonly string $tz,
         public readonly int $graceSeconds,
-        public readonly MonitorStatus $status,
+        public readonly MonitorStatus|string $status,
         public readonly ?\DateTimeImmutable $nextExpectedAt,
         public readonly ?\DateTimeImmutable $lastPingAt,
         public readonly \DateTimeImmutable $createdAt,
@@ -68,11 +74,11 @@ final class Monitor
         return new self(
             Hydrator::string($data, 'uuid'),
             Hydrator::string($data, 'name'),
-            Hydrator::enum(ScheduleKind::class, $data, 'schedule_kind'),
+            Hydrator::openEnum(ScheduleKind::class, $data, 'schedule_kind'),
             Hydrator::string($data, 'schedule_expr'),
             Hydrator::string($data, 'tz'),
             Hydrator::int($data, 'grace_seconds'),
-            Hydrator::enum(MonitorStatus::class, $data, 'status'),
+            Hydrator::openEnum(MonitorStatus::class, $data, 'status'),
             Hydrator::nullableDateTime($data, 'next_expected_at'),
             Hydrator::nullableDateTime($data, 'last_ping_at'),
             Hydrator::dateTime($data, 'created_at'),

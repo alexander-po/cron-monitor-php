@@ -373,9 +373,11 @@ final class MonitorApiClientTest extends TestCase
         }
 
         try {
+            // No token: the configuration refuses an account-wide token on a
+            // plain-HTTP wire. The bearer header is asserted over the recording
+            // transport instead.
             $client = MonitorApiClient::create(new Configuration(
                 $server->baseUrl(),
-                apiKey: 'cmk_smoke',
                 allowInsecureEndpoint: true,
             ));
 
@@ -398,7 +400,6 @@ final class MonitorApiClientTest extends TestCase
         try {
             $client = MonitorApiClient::create(new Configuration(
                 $server->baseUrl(),
-                apiKey: 'cmk_smoke',
                 allowInsecureEndpoint: true,
             ));
 

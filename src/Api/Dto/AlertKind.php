@@ -6,7 +6,8 @@ namespace CronMonitor\Api\Dto;
 
 /**
  * Kind of alert recorded in a monitor's history
- * (`GET /api/v1/monitors/{uuid}/alerts`). Mirrors the backend's `AlertKind`.
+ * (`GET /api/v1/monitors/{uuid}/alerts`). A kind added server-side arrives at
+ * {@see Alert::$kind} as its raw string rather than failing the read.
  */
 enum AlertKind: string
 {

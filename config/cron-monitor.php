@@ -53,7 +53,8 @@ return [
     |--------------------------------------------------------------------------
     | Required when pointing at a plain-HTTP self-hosted instance. Defaults
     | false so a misconfigured `CRON_MONITOR_ENDPOINT=http://...` fails fast
-    | rather than leaking the UUID over the wire.
+    | rather than leaking the UUID over the wire. It does not extend to the
+    | API token: an `api_key` alongside an http:// endpoint is rejected.
     */
     'allow_insecure_endpoint' => env('CRON_MONITOR_ALLOW_INSECURE', false),
 

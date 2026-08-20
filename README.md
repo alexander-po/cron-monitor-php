@@ -289,7 +289,9 @@ never breaks the queued job.
 ## Standalone CLI
 
 For plain cron / systemd timer users, the `vendor/bin/cron-monitor`
-binary doesn't require any framework:
+binary needs no framework and no extra HTTP client — it sends over the
+SDK's bundled cURL transport, so `composer require` really is the only
+install step:
 
 ```bash
 # Heartbeat from a one-liner cron entry
@@ -325,6 +327,7 @@ Starter plan or higher. The token rides on `Configuration::apiKey`:
 ```php
 use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Dto\ScheduleKind;
+use CronMonitor\Api\Dto\Vocabulary;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\Exception\RateLimitException;
 use CronMonitor\Api\Exception\ValidationException;
@@ -338,7 +341,7 @@ $api = MonitorApiClient::create(
 // List your monitors (paginated).
 $page = $api->listMonitors(offset: 0, limit: 50);
 foreach ($page->data as $monitor) {
-    printf("%s  %s  %s\n", $monitor->uuid, $monitor->status->value, $monitor->name);
+    printf("%s  %s  %s\n", $monitor->uuid, Vocabulary::value($monitor->status), $monitor->name);
 }
 
 // Or walk every page lazily.
@@ -394,10 +397,10 @@ $rotated = $api->rotateMonitorUuid($uuid);
 
 // History: pings are cursor-paginated, alerts are offset-paginated.
 foreach ($api->allPings($uuid) as $ping) {
-    printf("%s  %s  %sms\n", $ping->kind->value, $ping->receivedAt->format('c'), $ping->runtimeMs ?? '-');
+    printf("%s  %s  %sms\n", Vocabulary::value($ping->kind), $ping->receivedAt->format('c'), $ping->runtimeMs ?? '-');
 }
 foreach ($api->allAlerts($uuid) as $alert) {
-    printf("%s  %s\n", $alert->kind->value, $alert->createdAt->format('c'));
+    printf("%s  %s\n", Vocabulary::value($alert->kind), $alert->createdAt->format('c'));
 }
 
 // Channels: create / rename / delete / test / rotate the signing secret.
@@ -409,8 +412,19 @@ $secret = $api->rotateChannelSecret($webhookChannelId);  // plaintext returned O
 
 // Account: plan, monitor budget and live rate-limit standing in one read.
 $account = $api->getAccount();
-printf("Plan %s — %d/%d monitors used\n", $account->plan->key->value, $account->monitorBudget->used, $account->plan->monitorLimit);
+printf("Plan %s — %d/%d monitors used\n", Vocabulary::value($account->plan->key), $account->monitorBudget->used, $account->plan->monitorLimit);
 ```
+
+**Vocabularies are open on read.** `Monitor::$status`, `Monitor::$scheduleKind`,
+`Ping::$kind`, `Alert::$kind` and `Plan::$key` are typed `Enum|string`: you get
+the enum case for a value this SDK version knows, and the server's verbatim
+string for one it does not. A status added server-side therefore cannot make
+your monitor reads start failing — including for code that never looks at the
+field. Compare with `===` as before, use `Vocabulary::value()` when you just
+want the string, and narrow with `instanceof` (or `match` with a `default`)
+before branching on behaviour. Writing stays closed: a request DTO accepts
+nothing but a real enum case, so a passed-through value cannot be sent back as
+if the SDK understood it. Wrongly *typed* fields still fail the read loudly.
 
 **Reading a monitor's alert routing (1.3.0).** Every monitor a read returns carries
 `channels` — the notification channels it alerts, in the backend's id order:
@@ -508,12 +522,20 @@ zone, set the monitor's timezone on the dashboard after creating it.
 | `timeout_seconds`          | `5.0`                    | Per-request, low by design. |
 | `retries`                  | `1`                      | Pings are idempotent server-side. |
 | `api_key`                  | `null`                   | Personal Access Token (`cmk_…`) for the management API; not needed for pings. |
-| `allow_insecure_endpoint`  | `false`                  | Required for `http://` endpoints. |
+| `allow_insecure_endpoint`  | `false`                  | Required for `http://` endpoints. Refused outright when `api_key` is set. |
 
 ## Security
 
 - HTTPS is required by default. The SDK refuses to send pings to plain
   HTTP unless `allow_insecure_endpoint: true` is explicitly set.
+- `allow_insecure_endpoint` covers anonymous ping-only installs only.
+  Combining it with an `api_key` is a constructor error: the per-monitor
+  UUID on the wire is one monitor's credential, an account-wide token in
+  cleartext is the whole account's.
+- Neither credential reaches your logs. The ping client logs a truncated
+  SHA-256 of the monitor UUID (the same digest the server logs, so the two
+  join during an incident), and the management client reports the route it
+  called — `/api/v1/monitors/{uuid}` — rather than the resolved path.
 - The per-monitor UUID is treated as a write credential and is validated
   against the canonical UUID v4 shape before being concatenated into a
   URL — no path traversal via the action segment.

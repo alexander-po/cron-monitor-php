@@ -84,11 +84,43 @@ final class CronMonitorClientTest extends TestCase
         $client->success(self::UUID, $hugeBody);
 
         $sent = (string) $http->requests[0]->getBody();
-        // Server (cron-monitor backend `Ping::BODY_EXCERPT_MAX_BYTES`) caps
-        // at 10_000 bytes; the SDK matches exactly so the wire payload has no
-        // bytes the server will silently truncate.
+        // The server caps a ping's body excerpt at 10 000 bytes; the SDK
+        // matches that exactly, so the wire payload carries no bytes the
+        // server would silently drop.
         self::assertSame(10000, \strlen($sent));
         self::assertStringEndsWith('[truncated by SDK]', $sent);
+    }
+
+    public function test_truncation_does_not_split_a_three_byte_character(): void
+    {
+        // The euro sign straddles the byte the cap falls on: cutting there
+        // would emit a lone lead byte and leave the payload invalid UTF-8.
+        $sent = $this->bodyAsSent(str_repeat('A', 9980).'€'.str_repeat('A', 500));
+
+        self::assertSame(1, preg_match('//u', $sent), 'truncated body must stay valid UTF-8');
+        self::assertLessThanOrEqual(10000, \strlen($sent));
+        self::assertStringEndsWith('[truncated by SDK]', $sent);
+    }
+
+    public function test_truncation_does_not_split_a_four_byte_emoji(): void
+    {
+        $sent = $this->bodyAsSent(str_repeat('A', 9979).'🚀'.str_repeat('A', 500));
+
+        self::assertSame(1, preg_match('//u', $sent), 'truncated body must stay valid UTF-8');
+        self::assertLessThanOrEqual(10000, \strlen($sent));
+        self::assertStringEndsWith('[truncated by SDK]', $sent);
+    }
+
+    public function test_truncation_of_a_binary_body_stays_within_the_cap(): void
+    {
+        // Captured stderr is not guaranteed to be text at all; a body that was
+        // never valid UTF-8 must still be capped rather than rejected or grown.
+        $body = str_repeat("\xff\xfe", 8000);
+
+        $sent = $this->bodyAsSent($body);
+
+        self::assertSame(substr($body, 0, 9981)."\n[truncated by SDK]", $sent);
+        self::assertSame(10000, \strlen($sent));
     }
 
     public function test_4xx_response_does_not_retry(): void
@@ -231,5 +263,21 @@ final class CronMonitorClientTest extends TestCase
         } finally {
             $server->stop();
         }
+    }
+
+    private function bodyAsSent(string $body): string
+    {
+        $http = new RecordingHttpClient([new Response(200)]);
+        $factory = new HttpFactory();
+        $client = new CronMonitorClient(
+            new Configuration('https://cronheart.com'),
+            $http,
+            $factory,
+            $factory,
+        );
+
+        $client->success(self::UUID, $body);
+
+        return (string) $http->requests[0]->getBody();
     }
 }
