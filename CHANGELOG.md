@@ -6,6 +6,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [1.4.0] — 2026-08-20
+
 Hardening pass over the SDK's own core. **Two changes are breaking** — both are
 marked below, and each removes something that could not be kept without
 defeating the fix it belongs to. Everything else is additive or internal.
