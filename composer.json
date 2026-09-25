@@ -96,7 +96,9 @@
             "/.php-cs-fixer.dist.php",
             "/phpstan.dist.neon",
             "/phpunit.dist.xml",
-            "/CLAUDE.md"
+            "/CLAUDE.md",
+            "/skills",
+            "/AGENTS.md"
         ]
     }
 }

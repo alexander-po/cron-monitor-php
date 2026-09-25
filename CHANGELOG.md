@@ -6,7 +6,17 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet — open a PR and add your entry under the appropriate subsection._
+### Added
+
+- **`skills/add-cronheart/SKILL.md`, an agent-facing recipe for wiring this SDK
+  into an application.** A numbered, deterministic set of steps a coding agent
+  (or a person) follows to detect Symfony or Laravel, install the package, set
+  the configuration keys, attribute each scheduled task to a monitor, create
+  the monitors, verify the first ping and read the management-client
+  exceptions. `AGENTS.md` at the repository root points to it, and the README
+  gains a "For coding agents" section. Both are repository content, excluded
+  from the package a `composer require` install downloads via `.gitattributes`
+  `export-ignore`; they never reach an installed copy of the SDK.
 
 ## [1.4.1] — 2026-09-25
 
