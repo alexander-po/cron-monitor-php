@@ -559,6 +559,23 @@ zone, set the monitor's timezone on the dashboard after creating it.
   exception, or call `CronMonitorClient::fail($uuid, $body)` directly
   with a curated body.
 
+## For coding agents
+
+[`AGENTS.md`](AGENTS.md) at the repository root points to
+[`skills/add-cronheart/SKILL.md`](skills/add-cronheart/SKILL.md): a numbered
+recipe a coding agent (or a person in a hurry) follows to wire this SDK into
+an application. It detects Symfony or Laravel, installs the package, sets the
+configuration keys, attributes every scheduled task to a monitor, creates the
+monitors through `cron-monitor:sync` or the management client with a Personal
+Access Token, verifies the first ping and explains what each exception means.
+Claude Code loads it as a skill when the `add-cronheart` folder is copied into
+the application's `.claude/skills/`; any other agent can be pointed at the
+file. The recipe carries placeholder UUIDs and tokens only, and the test suite
+checks that every command it names is one the bundle registers. `skills/` and
+`AGENTS.md` are repository content: `.gitattributes` marks both `export-ignore`,
+so a `composer require` install (which downloads the VCS host's archive of the
+tagged commit) never receives them.
+
 ## Development
 
 ```bash
