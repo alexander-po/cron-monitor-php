@@ -7,7 +7,9 @@ namespace CronMonitor\Api\Exception;
 /**
  * Raised on HTTP 429 — the account's API rate limit was exceeded (shared by
  * every token on the account; 30 requests a minute on Free, more on the paid
- * tiers).
+ * tiers). The two signup calls raise it too, before any account exists: for
+ * the per-inbox and per-network signup limits, and for polling faster than
+ * the interval.
  *
  * `$retryAfter` is the number of seconds to wait before retrying, taken
  * from the `Retry-After` response header when present and otherwise from

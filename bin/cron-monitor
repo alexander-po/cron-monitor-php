@@ -15,17 +15,22 @@ declare(strict_types=1);
  *   vendor/bin/cron-monitor start     <uuid> [...]
  *   vendor/bin/cron-monitor success   <uuid> [...]
  *   vendor/bin/cron-monitor fail      <uuid> [...]
+ *   vendor/bin/cron-monitor signup    <email> --accept-terms [--endpoint=URL]
  *
  * Exit codes:
- *   0 — ping delivered with 2xx
+ *   0 — ping delivered with 2xx; signup confirmed and the token printed
  *   2 — ping failed at the network or HTTP layer (job continues; this is
  *       intentional so a flaky cron-monitor backend never breaks the
- *       wrapping shell pipeline)
+ *       wrapping shell pipeline); signup did not complete
  *   64 — usage error (bad arguments, unknown command, or an environment
  *        that cannot provide an HTTP transport)
  */
 
 exit((function (): int {
+    if (\function_exists('ini_set') && \in_array(strtolower((string) \ini_get('display_errors')), ['1', 'on', 'yes', 'true', 'stdout'], true)) {
+        ini_set('display_errors', 'stderr');
+    }
+
     $autoloadCandidates = [
         // Standalone vendored install: bin/ -> repo root -> vendor/autoload.php
         __DIR__.'/../vendor/autoload.php',
@@ -48,17 +53,21 @@ exit((function (): int {
     array_shift($argv); // strip script name
 
     if ([] === $argv || \in_array($argv[0], ['-h', '--help', 'help'], true)) {
-        printUsage();
+        printUsage([] === $argv ? \STDERR : \STDOUT);
 
         return [] === $argv ? 64 : 0;
     }
 
     $command = (string) array_shift($argv);
-    if (!\in_array($command, ['heartbeat', 'start', 'success', 'fail'], true)) {
-        fwrite(\STDERR, \sprintf("Unknown command: %s\n", $command));
-        printUsage();
+    if (!\in_array($command, ['heartbeat', 'start', 'success', 'fail', 'signup'], true)) {
+        fwrite(\STDERR, \sprintf("Unknown command: %s\n", CronMonitor\Api\Internal\SecretRedactor::redact($command)));
+        printUsage(\STDERR);
 
         return 64;
+    }
+
+    if ('signup' === $command) {
+        return runSignup($argv);
     }
 
     $uuid = null;
@@ -79,8 +88,8 @@ exit((function (): int {
         } elseif (!str_starts_with($arg, '--') && null === $uuid) {
             $uuid = $arg;
         } else {
-            fwrite(\STDERR, \sprintf("Unknown argument: %s\n", $arg));
-            printUsage();
+            fwrite(\STDERR, \sprintf("Unknown argument: %s\n", CronMonitor\Api\Internal\SecretRedactor::redact($arg)));
+            printUsage(\STDERR);
 
             return 64;
         }
@@ -88,7 +97,7 @@ exit((function (): int {
 
     if (null === $uuid) {
         fwrite(\STDERR, "Missing monitor UUID.\n");
-        printUsage();
+        printUsage(\STDERR);
 
         return 64;
     }
@@ -147,7 +156,70 @@ exit((function (): int {
     return 2;
 })());
 
-function printUsage(): void
+/**
+ * @param list<string> $argv
+ */
+function runSignup(array $argv): int
+{
+    $email = null;
+    $acceptTerms = false;
+    $endpoint = getenv('CRON_MONITOR_ENDPOINT') ?: CronMonitor\Client\Configuration::DEFAULT_ENDPOINT;
+
+    foreach ($argv as $arg) {
+        if ('--accept-terms' === $arg) {
+            $acceptTerms = true;
+        } elseif (str_starts_with($arg, '--endpoint=')) {
+            $endpoint = substr($arg, 11);
+        } elseif (!str_starts_with($arg, '--') && null === $email) {
+            $email = $arg;
+        } else {
+            fwrite(\STDERR, \sprintf("Unknown argument: %s\n", CronMonitor\Api\Internal\SecretRedactor::redact($arg)));
+            printUsage(\STDERR);
+
+            return 64;
+        }
+    }
+
+    if (null === $email) {
+        fwrite(\STDERR, "Missing email address.\n");
+        printUsage(\STDERR);
+
+        return 64;
+    }
+
+    try {
+        $config = new CronMonitor\Client\Configuration(endpoint: $endpoint, allowInsecureEndpoint: true);
+    } catch (InvalidArgumentException $e) {
+        fwrite(\STDERR, \sprintf("Configuration error: %s\n", $e->getMessage()));
+
+        return 64;
+    }
+
+    try {
+        $api = CronMonitor\Api\MonitorApiClient::create($config);
+    } catch (Throwable $e) {
+        fwrite(\STDERR, \sprintf("Could not build an HTTP transport: %s\n", $e->getMessage()));
+
+        return 64;
+    }
+
+    $command = new CronMonitor\Cli\SignupCommand($api, $endpoint, \STDOUT, \STDERR, static function (int $seconds): void {
+        sleep($seconds);
+    });
+
+    try {
+        return $command->run($email, $acceptTerms);
+    } catch (Throwable $e) {
+        fwrite(\STDERR, \sprintf("The signup failed: %s\n", CronMonitor\Api\Internal\SecretRedactor::redact($e->getMessage())));
+
+        return 2;
+    }
+}
+
+/**
+ * @param resource $stream
+ */
+function printUsage($stream): void
 {
     $usage = <<<'TXT'
         cron-monitor — ping client for scheduled jobs
@@ -157,6 +229,16 @@ function printUsage(): void
           cron-monitor start     <uuid> [--endpoint=URL] [--api-key=KEY]
           cron-monitor success   <uuid> [--endpoint=URL] [--api-key=KEY] [--body=TEXT]
           cron-monitor fail      <uuid> [--endpoint=URL] [--api-key=KEY] [--body=TEXT]
+          cron-monitor signup    <email> --accept-terms [--endpoint=URL]
+
+        SIGNUP
+          Creates an account and its first API token from the terminal. A mail
+          with a confirmation link goes to <email>; open it and type the code
+          this command shows. It waits for that (up to 30 minutes) and then
+          prints CRON_MONITOR_API_KEY=... on standard output, once; everything
+          else goes to standard error. --accept-terms states that you agree to
+          the Terms of Service ({default_endpoint}/terms) and the Privacy Policy
+          ({default_endpoint}/privacy).
 
         ENVIRONMENT
           CRON_MONITOR_ENDPOINT  default endpoint (default: {default_endpoint})
@@ -174,11 +256,15 @@ function printUsage(): void
               cron-monitor fail $UUID --body="$(cat /tmp/err)"
           fi
 
+          # Sign up; only the token line is appended, and only on success, to a
+          # git-ignored env file:
+          git check-ignore -q .env.local && (umask 077; line=$(cron-monitor signup 'you@example.com' --accept-terms | grep -E '^CRON_MONITOR_API_KEY=cmk_[A-Za-z0-9_-]+$') && printf '\n%s\n' "$line" >> .env.local)
+
         EXIT CODES
-          0   ping delivered with 2xx
-          2   ping failed at network or HTTP layer
+          0   ping delivered with 2xx; signup confirmed, token printed
+          2   ping failed at network or HTTP layer; signup did not complete
           64  usage error
         TXT;
 
-    fwrite(\STDOUT, str_replace('{default_endpoint}', CronMonitor\Client\Configuration::DEFAULT_ENDPOINT, $usage));
+    fwrite($stream, str_replace('{default_endpoint}', CronMonitor\Client\Configuration::DEFAULT_ENDPOINT, $usage));
 }

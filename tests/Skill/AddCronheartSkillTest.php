@@ -71,10 +71,27 @@ final class AddCronheartSkillTest extends TestCase
         self::assertNotEmpty($named, 'The recipe names no CLI subcommand, so the check would be vacuous.');
 
         foreach ($named as $subcommand) {
-            [$status, $stderr] = self::runCliWithoutUuid($subcommand);
+            [$status, $stderr] = self::runCli([$subcommand]);
+
             self::assertSame(64, $status);
-            self::assertStringStartsWith('Missing monitor UUID.', $stderr, \sprintf('%s is not a subcommand vendor/bin/cron-monitor accepts.', $subcommand));
+            self::assertStringStartsWith('signup' === $subcommand ? 'Missing email address.' : 'Missing monitor UUID.', $stderr, \sprintf('%s is not a subcommand vendor/bin/cron-monitor accepts.', $subcommand));
         }
+    }
+
+    public function test_the_signup_flags_the_recipe_passes_are_ones_the_binary_accepts(): void
+    {
+        if (!\function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is disabled in this environment.');
+        }
+
+        preg_match_all('~vendor/bin/cron-monitor\s+signup\s+\S+((?:\s+--[a-z-]+)+)~', self::skill(), $match);
+        self::assertNotEmpty($match[1], 'The recipe runs no signup with flags, so the check would be vacuous.');
+        $flags = array_values(array_unique(preg_split('/\s+/', trim(implode(' ', $match[1]))) ?: []));
+
+        [$status, $stderr] = self::runCli(['signup', 'you@example.com', ...$flags, '--endpoint=http://127.0.0.1:9']);
+
+        self::assertSame(64, $status);
+        self::assertStringStartsWith('Configuration error: Refusing to sign up over plain HTTP endpoint', $stderr, 'the binary rejected a flag the recipe passes');
     }
 
     private static function skill(): string
@@ -139,12 +156,14 @@ final class AddCronheartSkillTest extends TestCase
     }
 
     /**
+     * @param list<string> $arguments
+     *
      * @return array{int, string}
      */
-    private static function runCliWithoutUuid(string $subcommand): array
+    private static function runCli(array $arguments): array
     {
         $process = proc_open(
-            [\PHP_BINARY, __DIR__.'/../../bin/cron-monitor', $subcommand],
+            [\PHP_BINARY, __DIR__.'/../../bin/cron-monitor', ...$arguments],
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
         );

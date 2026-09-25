@@ -47,7 +47,8 @@ final class Configuration
          * monitors). The public `/ping/<uuid>` flow does not require it —
          * the per-monitor UUID is the only credential there — so anonymous
          * ping-only installs leave this null. Create a token in the
-         * cronheart.com dashboard (Settings → API Tokens).
+         * cronheart.com dashboard (Account → API tokens), or get an
+         * account and its first token with `vendor/bin/cron-monitor signup`.
          */
         public readonly ?string $apiKey = null,
         /**

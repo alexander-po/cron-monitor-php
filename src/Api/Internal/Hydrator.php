@@ -22,7 +22,7 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
-    public static function string(array $data, string $key): string
+    public static function string(#[\SensitiveParameter] array $data, string $key): string
     {
         $value = $data[$key] ?? null;
         if (!\is_string($value)) {
@@ -35,7 +35,7 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
-    public static function nullableString(array $data, string $key): ?string
+    public static function nullableString(#[\SensitiveParameter] array $data, string $key): ?string
     {
         $value = $data[$key] ?? null;
         if (null === $value) {
@@ -51,7 +51,7 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
-    public static function int(array $data, string $key): int
+    public static function int(#[\SensitiveParameter] array $data, string $key): int
     {
         $value = $data[$key] ?? null;
         if (!\is_int($value)) {
@@ -64,7 +64,7 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
-    public static function nullableInt(array $data, string $key): ?int
+    public static function nullableInt(#[\SensitiveParameter] array $data, string $key): ?int
     {
         $value = $data[$key] ?? null;
         if (null === $value) {
@@ -80,7 +80,7 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
-    public static function bool(array $data, string $key): bool
+    public static function bool(#[\SensitiveParameter] array $data, string $key): bool
     {
         $value = $data[$key] ?? null;
         if (!\is_bool($value)) {
@@ -95,7 +95,7 @@ final class Hydrator
      *
      * @return array<mixed>
      */
-    public static function arr(array $data, string $key): array
+    public static function arr(#[\SensitiveParameter] array $data, string $key): array
     {
         $value = $data[$key] ?? null;
         if (!\is_array($value)) {
@@ -108,7 +108,7 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
-    public static function dateTime(array $data, string $key): \DateTimeImmutable
+    public static function dateTime(#[\SensitiveParameter] array $data, string $key): \DateTimeImmutable
     {
         return self::parseTimestamp(self::string($data, $key), $key);
     }
@@ -116,7 +116,7 @@ final class Hydrator
     /**
      * @param array<string, mixed> $data
      */
-    public static function nullableDateTime(array $data, string $key): ?\DateTimeImmutable
+    public static function nullableDateTime(#[\SensitiveParameter] array $data, string $key): ?\DateTimeImmutable
     {
         $raw = self::nullableString($data, $key);
         if (null === $raw || '' === $raw) {
@@ -140,7 +140,7 @@ final class Hydrator
      *
      * @return T|string
      */
-    public static function openEnum(string $enumClass, array $data, string $key): \BackedEnum|string
+    public static function openEnum(string $enumClass, #[\SensitiveParameter] array $data, string $key): \BackedEnum|string
     {
         $raw = self::string($data, $key);
 
@@ -160,7 +160,7 @@ final class Hydrator
         }
     }
 
-    private static function typeError(string $key, string $expected, mixed $actual): \UnexpectedValueException
+    private static function typeError(string $key, string $expected, #[\SensitiveParameter] mixed $actual): \UnexpectedValueException
     {
         return new \UnexpectedValueException(\sprintf('Field "%s" must be %s, got %s.', $key, $expected, get_debug_type($actual)));
     }

@@ -16,12 +16,15 @@ use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\MonitorPage;
 use CronMonitor\Api\Dto\Ping;
 use CronMonitor\Api\Dto\PingPage;
+use CronMonitor\Api\Dto\SignupStarted;
+use CronMonitor\Api\Dto\SignupToken;
 use CronMonitor\Api\Dto\SnoozeDuration;
 use CronMonitor\Api\Dto\TestChannelResult;
 use CronMonitor\Api\Dto\UpdateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Exception\ChannelDeliveryException;
+use CronMonitor\Api\Exception\SignupExpiredException;
 use CronMonitor\Api\Exception\UnexpectedResponseException;
 use CronMonitor\Api\Internal\ExceptionFactory;
 use CronMonitor\Api\Internal\ProblemDetails;
@@ -48,7 +51,9 @@ use Psr\Log\NullLogger;
  * client **throws** typed {@see ApiException}s, because it runs in admin /
  * CLI contexts where the caller wants to know — and act — when something
  * fails. Authentication is the Personal Access Token (`cmk_...`) carried in
- * {@see Configuration::$apiKey} and sent as `Authorization: Bearer`.
+ * {@see Configuration::$apiKey} and sent as `Authorization: Bearer`; the two
+ * signup calls, which is how an account without a token gets its first one,
+ * send none.
  *
  * It reuses the same PSR-18 transport, PSR-17 factories and `Configuration`
  * as the ping client, so a host application that already wired those gets
@@ -90,8 +95,9 @@ final class MonitorApiClient
      *         Configuration::withDefaultEndpoint(apiKey: 'cmk_...')
      *     )->listMonitors();
      *
-     * An API token is required for every call — pass a `Configuration` whose
-     * `apiKey` is set, or the backend will answer `401`.
+     * An API token is required for every call except {@see startSignup()} and
+     * {@see pollSignupToken()} — pass a `Configuration` whose `apiKey` is set,
+     * or the backend will answer `401`.
      */
     public static function create(
         ?Configuration $configuration = null,
@@ -575,6 +581,71 @@ final class MonitorApiClient
     }
 
     /**
+     * Start a signup from a terminal: the backend mails `$email` one
+     * confirmation link, the person types the returned
+     * {@see SignupStarted::$userCode} on that page, and {@see pollSignupToken()}
+     * with the {@see SignupStarted::$deviceCode} then yields the new account's
+     * first token.
+     *
+     * `$acceptTerms` states that the person agreed to the service's terms and
+     * privacy policy; the backend refuses a signup without it, and so does this
+     * method, before any request. **Never retried**: a replay mails the address
+     * again and spends its daily signup budget.
+     *
+     * @throws \InvalidArgumentException when `$acceptTerms` is false or the endpoint is not HTTPS
+     * @throws ApiException
+     */
+    public function startSignup(string $email, bool $acceptTerms): SignupStarted
+    {
+        if (!$acceptTerms) {
+            throw new \InvalidArgumentException('A signup needs the terms accepted: pass acceptTerms: true once the person has agreed to them.');
+        }
+
+        [, $payload] = $this->signupRequest('/signup', ['email' => $email, 'accept_terms' => true]);
+
+        return $this->hydrate(static fn (): SignupStarted => SignupStarted::fromArray($payload));
+    }
+
+    /**
+     * Poll a started signup: `null` until the person confirms, then the
+     * {@see SignupToken}, exactly once. Wait at least
+     * {@see SignupStarted::$interval} seconds between polls; polling faster is
+     * an {@see Exception\RateLimitException} whose `retryAfter` says how long
+     * to wait. A request that is unknown, expired, cancelled or already claimed
+     * is a {@see SignupExpiredException}.
+     *
+     * **Never retried**: the caller's poll loop is the retry, at the interval
+     * the backend asked for. A confirmation whose answer cannot be read is an
+     * {@see ApiTransportException} carrying that answer's status: the token is
+     * issued once, so it is lost, and polling again only returns the 410.
+     *
+     * @throws \InvalidArgumentException when `$deviceCode` is empty or the endpoint is not HTTPS
+     * @throws ApiException
+     */
+    public function pollSignupToken(#[\SensitiveParameter] string $deviceCode): ?SignupToken
+    {
+        if ('' === $deviceCode) {
+            throw new \InvalidArgumentException('The device code must be the device_code of a started signup.');
+        }
+
+        try {
+            [$status, $payload] = $this->signupRequest('/signup/token', ['device_code' => $deviceCode]);
+        } catch (UnexpectedResponseException $e) {
+            if (410 === $e->statusCode) {
+                throw new SignupExpiredException($e->getMessage(), $e->statusCode, $e->detail, $e->title, $e);
+            }
+
+            throw $e;
+        }
+
+        if (202 === $status) {
+            return null;
+        }
+
+        return $this->hydrate(static fn (): SignupToken => SignupToken::fromArray($payload), $status);
+    }
+
+    /**
      * Shared path for the POST status transitions (pause / resume / snooze /
      * unsnooze): validate the UUID locally, POST to the sub-resource, and
      * hydrate the monitor the backend returns. All are retryable — each is an
@@ -664,7 +735,42 @@ final class MonitorApiClient
      */
     private function requestJson(string $method, string $path, ?array $body, bool $retryable, array $extraHeaders = []): array
     {
-        $response = $this->send($this->buildRequest($method, $path, $body, $extraHeaders), $retryable);
+        return $this->readJsonObject($this->send($this->buildRequest($method, $path, $body, $extraHeaders), $retryable));
+    }
+
+    /**
+     * The two signup calls. They carry no token, even when one is configured,
+     * and refuse anything but HTTPS whatever {@see Configuration::$allowInsecureEndpoint}
+     * says: the poll's answer is the account's first token, and the device
+     * code that claims it travels in every poll.
+     *
+     * @param array<string, mixed> $body
+     *
+     * @return array{int, array<string, mixed>} the HTTP status and the decoded object body
+     *
+     * @throws ApiException
+     */
+    private function signupRequest(string $path, #[\SensitiveParameter] array $body): array
+    {
+        if ('https' !== parse_url($this->configuration->endpoint, \PHP_URL_SCHEME)) {
+            throw new \InvalidArgumentException(\sprintf('Refusing to sign up over plain HTTP endpoint %s: the answer carries an API token.', $this->configuration->endpoint));
+        }
+
+        $response = $this->send($this->buildRequest('POST', $path, $body, authenticated: false), false);
+
+        return [$response->getStatusCode(), $this->readJsonObject($response)];
+    }
+
+    /**
+     * The decoded object body of a 2xx response, or the mapped
+     * {@see ApiException} for anything else.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws ApiException
+     */
+    private function readJsonObject(ResponseInterface $response): array
+    {
         $status = $response->getStatusCode();
         $rawBody = (string) $response->getBody();
 
@@ -672,10 +778,9 @@ final class MonitorApiClient
             throw ExceptionFactory::fromResponse($status, ProblemDetails::parse($rawBody, $status), $this->retryAfterSeconds($response));
         }
 
-        try {
-            $decoded = json_decode($rawBody, true, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            throw new ApiTransportException(\sprintf('Could not decode the API response as JSON (HTTP %d).', $status), $status, null, null, $e);
+        $decoded = json_decode($rawBody, true);
+        if (\JSON_ERROR_NONE !== json_last_error()) {
+            throw new ApiTransportException(\sprintf('Could not decode the API response as JSON (HTTP %d): %s.', $status, json_last_error_msg()), $status);
         }
 
         if (!\is_array($decoded)) {
@@ -713,7 +818,7 @@ final class MonitorApiClient
      *
      * @throws ApiTransportException when the request body cannot be JSON-encoded
      */
-    private function buildRequest(string $method, string $path, ?array $body, array $extraHeaders = []): RequestInterface
+    private function buildRequest(string $method, string $path, #[\SensitiveParameter] ?array $body, array $extraHeaders = [], bool $authenticated = true): RequestInterface
     {
         $url = rtrim($this->configuration->endpoint, '/').self::API_PREFIX.$path;
 
@@ -721,7 +826,7 @@ final class MonitorApiClient
             ->withHeader('User-Agent', self::USER_AGENT)
             ->withHeader('Accept', 'application/json');
 
-        if (null !== $this->configuration->apiKey) {
+        if ($authenticated && null !== $this->configuration->apiKey) {
             $request = $request->withHeader('Authorization', 'Bearer '.$this->configuration->apiKey);
         }
 
@@ -838,22 +943,25 @@ final class MonitorApiClient
     /**
      * Run a DTO hydrator, converting a malformed-response
      * {@see \UnexpectedValueException} into an {@see ApiTransportException}
-     * so callers only ever have to catch {@see ApiException}.
+     * so callers only ever have to catch {@see ApiException}. The hydrator
+     * closes over the decoded payload, which for the signup calls holds the
+     * device code or the token, so it stays out of stack traces.
      *
      * @template T of object
      *
      * @param \Closure(): T $hydrator
+     * @param int|null      $status   the status of the answer that could not be read, when it matters to the caller
      *
      * @return T
      *
      * @throws ApiTransportException
      */
-    private function hydrate(\Closure $hydrator): object
+    private function hydrate(#[\SensitiveParameter] \Closure $hydrator, ?int $status = null): object
     {
         try {
             return $hydrator();
         } catch (\UnexpectedValueException $e) {
-            throw new ApiTransportException('The API returned a response the SDK could not interpret: '.$e->getMessage(), null, null, null, $e);
+            throw new ApiTransportException('The API returned a response the SDK could not interpret: '.$e->getMessage(), $status, null, null, $e);
         }
     }
 }

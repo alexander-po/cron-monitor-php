@@ -134,6 +134,8 @@ not a file path:
 | 204 / 502 contract    | `requestNoContent()` (204); generic 502 → `UnexpectedResponseException`, `testChannel()` 502 → `ChannelDeliveryException` (subclass) | backend DELETE routes; channel-test bad-gateway (502) |
 | `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | backend idempotency guard (full-body fingerprint)         |
 | Log digest for a UUID | `CronMonitorClient::hashUuid()` (`substr(sha256(lowercased uuid), 0, 16)`) | the same truncated digest the backend logs — the two streams join on it, so the input form must stay identical on both sides |
+| Terminal signup       | `startSignup()` (202 → `SignupStarted`); `pollSignupToken()` (202 → `null`, 200 → `SignupToken`, 410 → `SignupExpiredException`, 429 → `RateLimitException`); no bearer token, HTTPS only | backend signup + signup-token endpoints (`accept_terms` must be `true`; the token is returned once) |
+| Token alphabet        | `SecretRedactor::API_KEY_PATTERN` (`cmk_[A-Za-z0-9_-]+`): what the redactor strips and what `cron-monitor signup` agrees to write into an env line | the backend's token format (a `cmk_` token must stay inside that alphabet) |
 
 ## What this SDK does NOT do
 
@@ -145,7 +147,9 @@ Don't add these without explicit design discussion:
   cleanup on a host job that's about to exit.
 - Server-side polling. The public `/ping/<uuid>` flow is
   anonymous-via-UUID-as-credential by design; there is no long-poll or
-  webhook-subscription surface in the SDK.
+  webhook-subscription surface in the SDK. The one poll loop is the
+  terminal signup's wait for its token (`pollSignupToken`), bounded by the
+  code's lifetime.
 - The management client (`CronMonitor\Api\MonitorApiClient`) THROWS
   (admin / CLI context); keep it strictly separate from the no-throw ping
   client. 1.0.0 shipped list / get / create monitors + list channels;
@@ -165,7 +169,10 @@ Don't add these without explicit design discussion:
   against a spec, or copied between monitors; it reports attachment, not
   deliverability, and an empty list must never be fed straight back into
   `channelIds` (that clears routing). See README "Managing monitors via
-  the API". Still deferred to a later minor: surfacing
+  the API". 1.5.0 added the two anonymous signup calls
+  (`startSignup` / `pollSignupToken`) and the `vendor/bin/cron-monitor
+  signup` command on top of them, whose standard output carries only the
+  `CRON_MONITOR_API_KEY=` line. Still deferred to a later minor: surfacing
   `Idempotency-Replayed`.
 - Bundled framework version pins. Composer constraints stay loose
   (`^6.4 || ^7.0` for Symfony, `^10.0 || ^11.0` for Laravel); the

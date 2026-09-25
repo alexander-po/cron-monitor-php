@@ -16,8 +16,10 @@ use CronMonitor\Api\Internal\SecretRedactor;
  * uniformly, or a specific subclass (e.g. {@see ValidationException}) to
  * branch on the failure mode.
  *
- * `$statusCode` is the HTTP status, or null for transport / decode
- * failures (see {@see ApiTransportException}). `$detail` / `$title` carry
+ * `$statusCode` is the HTTP status, or null when no response arrived (see
+ * {@see ApiTransportException}). A response that arrived but could not be
+ * decoded keeps its status, and so does a signup confirmation that could not
+ * be read; other DTO read failures carry null. `$detail` / `$title` carry
  * the RFC 7807 `application/problem+json` fields when the backend supplied
  * them.
  *
