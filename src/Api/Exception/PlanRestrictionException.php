@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace CronMonitor\Api\Exception;
 
 /**
- * Raised on HTTP 402 — the account's plan does not include API access.
+ * Raised on HTTP 402 — the server declined the call on the account's plan.
  *
- * The backend gates the management API behind the Starter tier and up.
- * `$upgradeUrl` carries the RFC 7807 `upgrade_url` extension when present,
- * so a UI can link the operator straight to the upgrade page.
+ * Every plan includes the management API (Free at 30 requests a minute per
+ * account, the paid tiers above that), so cronheart.com no longer answers
+ * 402 for API access itself and this class is not an "upgrade to Starter"
+ * signal. It stays so the status mapping is stable: a self-hosted or older
+ * backend, or a plan-gated feature added later, can still send one, with
+ * `$upgradeUrl` carrying the RFC 7807 `upgrade_url` extension when present.
  */
 final class PlanRestrictionException extends ApiException
 {

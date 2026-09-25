@@ -8,6 +8,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.4.1] — 2026-09-25
+
+A documentation-only patch. cronheart.com opened the REST API to the Free
+plan, so the SDK's copy no longer ties a management-API token to a paid tier.
+No code path changes and the wire mapping is untouched.
+
+### Documentation
+
+- **The management API is on every plan.** The README, the `api_key` knob and
+  the `PlanRestrictionException` docblock said API access required Starter or
+  higher. Every plan now includes it, rate-limited per account — 30 requests a
+  minute on Free, 120 on Starter, 300 on Growth, 600 on Scale — and the token
+  is issued from Account → API tokens. `PlanRestrictionException` stays as the
+  402 mapping for a self-hosted or older backend, or for a plan-gated feature
+  added later; it is no longer an "upgrade to use the API" signal.
+- **Rate-limit docblocks name the account, not the token.** The limit is
+  shared by every token on the account, and `RateLimitStanding::$limit` now
+  lists the Free allowance alongside the paid tiers.
+
 ## [1.4.0] — 2026-08-20
 
 Hardening pass over the SDK's own core. **Two changes are breaking** — both are
