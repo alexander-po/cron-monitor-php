@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace CronMonitor\Api\Exception;
 
 /**
- * Raised on HTTP 429 — the per-token rate limit was exceeded.
+ * Raised on HTTP 429 — the account's API rate limit was exceeded (shared by
+ * every token on the account; 30 requests a minute on Free, more on the paid
+ * tiers).
  *
  * `$retryAfter` is the number of seconds to wait before retrying, taken
  * from the `Retry-After` response header when present and otherwise from

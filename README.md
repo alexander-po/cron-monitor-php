@@ -321,8 +321,10 @@ typed exceptions, because you call it from admin screens or CLI tooling
 where you want to know — and react — when something fails.
 
 Authenticate with a Personal Access Token (`cmk_…`) created in the
-cronheart.com dashboard (Settings → API Tokens). API access requires a
-Starter plan or higher. The token rides on `Configuration::apiKey`:
+cronheart.com dashboard (Settings → API Tokens). Every plan includes the
+API, Free too; requests are rate-limited per account — 30 a minute on
+Free, more on the paid tiers (120 Starter, 300 Growth, 600 Scale). The
+token rides on `Configuration::apiKey`:
 
 ```php
 use CronMonitor\Api\Dto\CreateMonitorRequest;
@@ -366,7 +368,7 @@ try {
 } catch (RateLimitException $e) {
     echo "Slow down; retry after {$e->retryAfter}s\n";
 } catch (ApiException $e) {
-    // Catch the base type for any other API failure (auth, plan, network…).
+    // Catch the base type for any other API failure (auth, limits, network…).
     error_log($e->getMessage());
 }
 ```
@@ -521,7 +523,7 @@ zone, set the monitor's timezone on the dashboard after creating it.
 | `endpoint`                 | `https://cronheart.com`  | Self-hosted: point at your install. |
 | `timeout_seconds`          | `5.0`                    | Per-request, low by design. |
 | `retries`                  | `1`                      | Pings are idempotent server-side. |
-| `api_key`                  | `null`                   | Personal Access Token (`cmk_…`) for the management API; not needed for pings. |
+| `api_key`                  | `null`                   | Personal Access Token (`cmk_…`) for the management API, issued on every plan; not needed for pings. |
 | `allow_insecure_endpoint`  | `false`                  | Required for `http://` endpoints. Refused outright when `api_key` is set. |
 
 ## Security
