@@ -6,6 +6,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [1.4.2] — 2026-09-25
+
+A documentation-only patch. The repository gains an agent-facing setup recipe; the
+installed package changes only by the README section that points to it. No code
+path changes and the wire mapping is untouched.
+
 ### Added
 
 - **`skills/add-cronheart/SKILL.md`, an agent-facing recipe for wiring this SDK
