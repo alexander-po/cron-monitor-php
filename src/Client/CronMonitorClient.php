@@ -38,7 +38,7 @@ final class CronMonitorClient
      */
     private const BODY_CAP_BYTES = 10000;
 
-    private const USER_AGENT = 'cron-monitor-php-sdk/1.4';
+    private const USER_AGENT = 'cron-monitor-php-sdk/1.5';
 
     private const TRUNCATION_MARKER = "\n[truncated by SDK]";
 
