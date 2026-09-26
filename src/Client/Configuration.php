@@ -50,6 +50,7 @@ final class Configuration
          * cronheart.com dashboard (Account → API tokens), or get an
          * account and its first token with `vendor/bin/cron-monitor signup`.
          */
+        #[\SensitiveParameter]
         public readonly ?string $apiKey = null,
         /**
          * When `false`, the SDK will not allow plain-HTTP endpoints. The
@@ -103,6 +104,7 @@ final class Configuration
     public static function withDefaultEndpoint(
         float $timeoutSeconds = self::DEFAULT_TIMEOUT_SECONDS,
         int $retries = self::DEFAULT_RETRIES,
+        #[\SensitiveParameter]
         ?string $apiKey = null,
     ): self {
         return new self(self::DEFAULT_ENDPOINT, $timeoutSeconds, $retries, $apiKey);
@@ -113,7 +115,7 @@ final class Configuration
      * validated before being concatenated to defend against accidental injection
      * (e.g. a monitor identifier being read from user-controlled config).
      */
-    public function pingUrl(string $monitorUuid, ?string $action = null): string
+    public function pingUrl(#[\SensitiveParameter] string $monitorUuid, ?string $action = null): string
     {
         // The identifier is deliberately not echoed: this message reaches a
         // log record and a PingResult, and a value that merely fails the
@@ -137,5 +139,23 @@ final class Configuration
         }
 
         return $base.'/'.$action;
+    }
+
+    /**
+     * `print_r()` and `var_dump()` show the token the way PHP shows a
+     * `#[\SensitiveParameter]` argument, because this object also reaches
+     * frames no SDK attribute covers: the host's own, and any that received a
+     * client holding it.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        if (null !== $this->apiKey) {
+            $properties['apiKey'] = new \SensitiveParameterValue($this->apiKey);
+        }
+
+        return $properties;
     }
 }

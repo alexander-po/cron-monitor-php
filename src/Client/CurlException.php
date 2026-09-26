@@ -27,4 +27,18 @@ final class CurlException extends \RuntimeException implements NetworkExceptionI
     {
         return $this->request;
     }
+
+    /**
+     * `print_r()` and `var_dump()` show the request the way PHP shows a
+     * `#[\SensitiveParameter]` argument: it carries the token and the UUID.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = (array) $this;
+        $properties["\0".self::class."\0request"] = new \SensitiveParameterValue($this->request);
+
+        return $properties;
+    }
 }

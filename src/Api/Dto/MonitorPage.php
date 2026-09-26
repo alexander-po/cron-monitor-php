@@ -36,7 +36,7 @@ final class MonitorPage
      *
      * @throws \UnexpectedValueException when the envelope or a row is malformed
      */
-    public static function fromArray(array $payload): self
+    public static function fromArray(#[\SensitiveParameter] array $payload): self
     {
         $monitors = [];
         foreach (Hydrator::arr($payload, 'data') as $row) {

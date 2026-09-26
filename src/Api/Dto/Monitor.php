@@ -69,7 +69,7 @@ final class Monitor
      *
      * @throws \UnexpectedValueException when a field is missing or malformed
      */
-    public static function fromArray(array $data): self
+    public static function fromArray(#[\SensitiveParameter] array $data): self
     {
         return new self(
             Hydrator::string($data, 'uuid'),
@@ -96,7 +96,7 @@ final class Monitor
      *
      * @throws \UnexpectedValueException when the routing list or an entry is malformed
      */
-    private static function channelsFrom(array $data): array
+    private static function channelsFrom(#[\SensitiveParameter] array $data): array
     {
         // Absent on a backend older than the routing-reads release; treated as
         // "no routing reported" rather than failing the whole monitor read.

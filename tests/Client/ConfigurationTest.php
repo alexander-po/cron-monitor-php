@@ -4,11 +4,20 @@ declare(strict_types=1);
 
 namespace CronMonitor\Tests\Client;
 
+use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Client\Configuration;
+use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
+use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\TestCase;
 
 final class ConfigurationTest extends TestCase
 {
+    use SecretTraceAssertions;
+
+    private const API_KEY = 'cmk_Qx7Tr4Lm9Vb2Nc6Hp1Zw';
+    private const UUID = '0e9a3f5c-7b21-4d8e-9c6a-2f4b8d1e7a35';
+
     public function test_default_endpoint_is_https_and_pointed_at_saas(): void
     {
         $config = Configuration::withDefaultEndpoint();
@@ -134,5 +143,43 @@ final class ConfigurationTest extends TestCase
         $config = new Configuration('https://cron.internal', apiKey: 'cmk_live_token', allowInsecureEndpoint: true);
 
         self::assertSame('cmk_live_token', $config->apiKey);
+    }
+
+    public function test_a_rejected_api_key_stays_out_of_trace_arguments(): void
+    {
+        $this->assertSecretStaysOutOfTraces(self::API_KEY, static fn () => new Configuration('http://self-hosted.lan', apiKey: self::API_KEY, allowInsecureEndpoint: true), \InvalidArgumentException::class);
+        $this->assertSecretStaysOutOfTraces(self::API_KEY, static fn () => Configuration::withDefaultEndpoint(apiKey: self::API_KEY."\n"), \InvalidArgumentException::class);
+    }
+
+    public function test_a_rejected_ping_action_keeps_the_monitor_uuid_out_of_trace_arguments(): void
+    {
+        $configuration = Configuration::withDefaultEndpoint();
+
+        $this->assertSecretStaysOutOfTraces(self::UUID, static fn () => $configuration->pingUrl(self::UUID, 'not an action'), \InvalidArgumentException::class);
+    }
+
+    public function test_a_client_that_cannot_be_built_keeps_the_api_key_out_of_trace_arguments(): void
+    {
+        $configuration = new Configuration('https://cronheart.com', apiKey: self::API_KEY);
+        $factory = new Psr17Factory();
+        $notAClient = self::misWiredDependency();
+
+        $builds = [
+            static fn () => new MonitorApiClient($configuration, $notAClient, $factory, $factory),
+            static fn () => MonitorApiClient::create($configuration, $notAClient),
+            static fn () => new CronMonitorClient($configuration, $notAClient, $factory, $factory),
+            static fn () => CronMonitorClient::create($configuration, $notAClient),
+        ];
+
+        foreach ($builds as $build) {
+            $this->assertSecretStaysOutOfTraces(self::API_KEY, $build, \TypeError::class);
+        }
+        self::assertStringNotContainsString(self::API_KEY, print_r(MonitorApiClient::create($configuration), true));
+        self::assertStringNotContainsString(self::API_KEY, print_r(CronMonitorClient::create($configuration), true));
+    }
+
+    private static function misWiredDependency(): mixed
+    {
+        return 'a string where an object belongs';
     }
 }

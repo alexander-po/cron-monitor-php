@@ -6,10 +6,13 @@ namespace CronMonitor\Tests\Api\Dto;
 
 use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\MonitorPage;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class MonitorPageTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     /**
      * @return array<string, mixed>
      */
@@ -78,5 +81,21 @@ final class MonitorPageTest extends TestCase
     {
         $this->expectException(\UnexpectedValueException::class);
         MonitorPage::fromArray(['total' => 0, 'limit' => 50, 'offset' => 0]);
+    }
+
+    public function test_a_malformed_page_keeps_the_monitor_uuids_out_of_trace_arguments(): void
+    {
+        $listed = '11111111-1111-4111-8111-111111111111';
+        $broken = '22222222-2222-4222-8222-222222222222';
+        $envelope = ['total' => 2, 'limit' => 2, 'offset' => 0];
+
+        $malformed = [
+            [['data' => [self::monitorRow($listed), 'not a monitor']] + $envelope, $listed],
+            [['data' => [self::monitorRow($listed), ['grace_seconds' => 'sixty'] + self::monitorRow($broken)]] + $envelope, $broken],
+        ];
+
+        foreach ($malformed as [$payload, $uuid]) {
+            $this->assertSecretStaysOutOfTraces($uuid, static fn () => MonitorPage::fromArray($payload), \UnexpectedValueException::class);
+        }
     }
 }

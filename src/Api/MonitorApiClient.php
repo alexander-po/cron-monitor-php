@@ -139,7 +139,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function getMonitor(string $uuid): Monitor
+    public function getMonitor(#[\SensitiveParameter] string $uuid): Monitor
     {
         $this->assertUuid($uuid);
 
@@ -219,7 +219,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function updateMonitor(string $uuid, UpdateMonitorRequest $request): Monitor
+    public function updateMonitor(#[\SensitiveParameter] string $uuid, UpdateMonitorRequest $request): Monitor
     {
         $this->assertUuid($uuid);
         if ($request->isEmpty()) {
@@ -241,7 +241,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function deleteMonitor(string $uuid): void
+    public function deleteMonitor(#[\SensitiveParameter] string $uuid): void
     {
         $this->assertUuid($uuid);
 
@@ -254,7 +254,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function pauseMonitor(string $uuid): Monitor
+    public function pauseMonitor(#[\SensitiveParameter] string $uuid): Monitor
     {
         return $this->transitionMonitor($uuid, '/pause', null);
     }
@@ -265,7 +265,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function resumeMonitor(string $uuid): Monitor
+    public function resumeMonitor(#[\SensitiveParameter] string $uuid): Monitor
     {
         return $this->transitionMonitor($uuid, '/resume', null);
     }
@@ -277,7 +277,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function snoozeMonitor(string $uuid, SnoozeDuration $duration): Monitor
+    public function snoozeMonitor(#[\SensitiveParameter] string $uuid, SnoozeDuration $duration): Monitor
     {
         return $this->transitionMonitor($uuid, '/snooze', ['duration' => $duration->value]);
     }
@@ -288,7 +288,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function unsnoozeMonitor(string $uuid): Monitor
+    public function unsnoozeMonitor(#[\SensitiveParameter] string $uuid): Monitor
     {
         return $this->transitionMonitor($uuid, '/unsnooze', null);
     }
@@ -304,7 +304,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function rotateMonitorUuid(string $uuid): Monitor
+    public function rotateMonitorUuid(#[\SensitiveParameter] string $uuid): Monitor
     {
         $this->assertUuid($uuid);
 
@@ -324,7 +324,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function listPings(string $uuid, int $limit = self::DEFAULT_LIST_LIMIT, ?string $cursor = null): PingPage
+    public function listPings(#[\SensitiveParameter] string $uuid, int $limit = self::DEFAULT_LIST_LIMIT, ?string $cursor = null): PingPage
     {
         $this->assertUuid($uuid);
         $limit = max(1, min($limit, self::MAX_LIST_LIMIT));
@@ -353,7 +353,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function allPings(string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
+    public function allPings(#[\SensitiveParameter] string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
     {
         $pageSize = max(1, min($pageSize, self::MAX_LIST_LIMIT));
         $cursor = null;
@@ -384,7 +384,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function listAlerts(string $uuid, int $offset = 0, int $limit = self::DEFAULT_LIST_LIMIT): AlertPage
+    public function listAlerts(#[\SensitiveParameter] string $uuid, int $offset = 0, int $limit = self::DEFAULT_LIST_LIMIT): AlertPage
     {
         $this->assertUuid($uuid);
         if ($offset < 0) {
@@ -407,7 +407,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function allAlerts(string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
+    public function allAlerts(#[\SensitiveParameter] string $uuid, int $pageSize = self::MAX_LIST_LIMIT): iterable
     {
         $pageSize = max(1, min($pageSize, self::MAX_LIST_LIMIT));
         $offset = 0;
@@ -655,7 +655,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    private function transitionMonitor(string $uuid, string $subPath, ?array $body): Monitor
+    private function transitionMonitor(#[\SensitiveParameter] string $uuid, string $subPath, ?array $body): Monitor
     {
         $this->assertUuid($uuid);
 
@@ -666,12 +666,13 @@ final class MonitorApiClient
 
     /**
      * Validate a monitor UUID locally before any HTTP request, giving a
-     * friendly error instead of a server `404`.
+     * friendly error instead of a server `404`. The rejected value is not
+     * quoted: one that fails the anchored match can still hold a real UUID.
      */
-    private function assertUuid(string $uuid): void
+    private function assertUuid(#[\SensitiveParameter] string $uuid): void
     {
         if (1 !== preg_match('/^'.SecretRedactor::UUID_PATTERN.'$/i', $uuid)) {
-            throw new \InvalidArgumentException(\sprintf('%s is not a valid monitor UUID.', $uuid));
+            throw new \InvalidArgumentException('The monitor identifier is not a valid cron-monitor UUID.');
         }
     }
 
@@ -733,7 +734,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    private function requestJson(string $method, string $path, #[\SensitiveParameter] ?array $body, bool $retryable, array $extraHeaders = []): array
+    private function requestJson(string $method, #[\SensitiveParameter] string $path, #[\SensitiveParameter] ?array $body, bool $retryable, array $extraHeaders = []): array
     {
         return $this->readJsonObject($this->send($this->buildRequest($method, $path, $body, $extraHeaders), $retryable));
     }
@@ -802,7 +803,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    private function requestNoContent(string $method, string $path, ?array $body, bool $retryable): void
+    private function requestNoContent(string $method, #[\SensitiveParameter] string $path, ?array $body, bool $retryable): void
     {
         $response = $this->send($this->buildRequest($method, $path, $body), $retryable);
         $status = $response->getStatusCode();
@@ -818,7 +819,7 @@ final class MonitorApiClient
      *
      * @throws ApiTransportException when the request body cannot be JSON-encoded
      */
-    private function buildRequest(string $method, string $path, #[\SensitiveParameter] ?array $body, array $extraHeaders = [], bool $authenticated = true): RequestInterface
+    private function buildRequest(string $method, #[\SensitiveParameter] string $path, #[\SensitiveParameter] ?array $body, array $extraHeaders = [], bool $authenticated = true): RequestInterface
     {
         $url = rtrim($this->configuration->endpoint, '/').self::API_PREFIX.$path;
 
@@ -866,7 +867,7 @@ final class MonitorApiClient
      *
      * @throws ApiTransportException when every attempt fails at the transport level
      */
-    private function send(RequestInterface $request, bool $retryable): ResponseInterface
+    private function send(#[\SensitiveParameter] RequestInterface $request, bool $retryable): ResponseInterface
     {
         $maxAttempts = $retryable ? $this->configuration->retries + 1 : 1;
         $lastTransport = null;

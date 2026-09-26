@@ -7,13 +7,21 @@ namespace CronMonitor\Tests\Client;
 use CronMonitor\Client\CurlException;
 use CronMonitor\Client\CurlPsr18Client;
 use CronMonitor\Tests\Support\LocalHttpServer;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\NetworkExceptionInterface;
+use Psr\Http\Message\RequestInterface;
 
 final class CurlPsr18ClientTest extends TestCase
 {
+    use SecretTraceAssertions;
+
+    private const TOKEN = 'cmk_Hd5Wq2Ys8Ka3Pe7Tn4Gv';
+
+    private const UUID = '3c7e9b12-5d4f-4a86-b0e3-8f1a6c2d9e47';
+
     private static ?LocalHttpServer $server = null;
 
     public static function setUpBeforeClass(): void
@@ -99,5 +107,36 @@ final class CurlPsr18ClientTest extends TestCase
             self::assertInstanceOf(NetworkExceptionInterface::class, $e);
             self::assertStringContainsString('cURL error', $e->getMessage());
         }
+    }
+
+    public function test_a_refused_connection_keeps_the_bearer_token_and_the_monitor_uuid_out_of_trace_arguments(): void
+    {
+        $factory = new Psr17Factory();
+        $client = new CurlPsr18Client($factory, $factory, 1.0);
+        $request = self::authenticatedPing('http://127.0.0.1:1');
+
+        $this->assertSecretStaysOutOfTraces(self::TOKEN, static fn () => $client->sendRequest($request), CurlException::class);
+        $this->assertSecretStaysOutOfTraces(self::UUID, static fn () => $client->sendRequest($request), CurlException::class);
+    }
+
+    public function test_a_printed_transport_failure_keeps_the_request_it_carries_hidden(): void
+    {
+        $request = self::authenticatedPing('https://cronheart.com');
+
+        self::assertSame($request, (new CurlException('cURL error (7): Failed to connect.', $request))->getRequest());
+        $printed = [
+            self::printedWithoutFrameArguments(static fn () => throw new CurlException('cURL error (7): Failed to connect.', $request), CurlException::class),
+            self::printedWithoutFrameArguments(static fn () => throw new \RuntimeException('Wrapped.', 0, new CurlException('cURL error (7): Failed to connect.', $request)), \RuntimeException::class),
+        ];
+        foreach ($printed as $dump) {
+            self::assertStringNotContainsString(self::TOKEN, $dump);
+            self::assertStringNotContainsString(self::UUID, $dump);
+        }
+    }
+
+    private static function authenticatedPing(string $endpoint): RequestInterface
+    {
+        return (new Psr17Factory())->createRequest('POST', $endpoint.'/ping/'.self::UUID)
+            ->withHeader('Authorization', 'Bearer '.self::TOKEN);
     }
 }
