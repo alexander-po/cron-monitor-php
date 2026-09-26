@@ -11,12 +11,15 @@ use CronMonitor\Tests\Fixtures\Symfony\BrokenMonitorAttributeCommand;
 use CronMonitor\Tests\Fixtures\Symfony\EmptyMonitorAttributeCommand;
 use CronMonitor\Tests\Fixtures\Symfony\EnvMonitoredAttributedCommand;
 use CronMonitor\Tests\Fixtures\Symfony\MonitoredAttributedCommand;
+use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\Event\ConsoleCommandEvent;
@@ -24,10 +27,43 @@ use Symfony\Component\Console\Event\ConsoleErrorEvent;
 use Symfony\Component\Console\Event\ConsoleTerminateEvent;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
 final class MonitorConsoleSubscriberTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     private const UUID = '33333333-3333-4333-8333-333333333333';
+
+    public function test_a_failed_ping_keeps_a_mapped_uuid_out_of_the_frames_a_logger_records(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $subscriber = new MonitorConsoleSubscriber(self::clientThatFailsEveryPing($logger), ['app:reports:nightly' => self::UUID]);
+
+        $this->dispatchARunThroughTheApplication($subscriber, $this->commandNamed('app:reports:nightly'));
+
+        self::assertCount(2, $logger->records);
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [
+            MonitorConsoleSubscriber::class.'->onCommand',
+            MonitorConsoleSubscriber::class.'->onTerminate',
+            MonitorConsoleSubscriber::class.'->safePing',
+        ]);
+    }
+
+    public function test_a_failed_ping_keeps_an_attribute_uuid_out_of_the_frames_a_logger_records(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $subscriber = new MonitorConsoleSubscriber(self::clientThatFailsEveryPing($logger), []);
+
+        $this->dispatchARunThroughTheApplication($subscriber, new MonitoredAttributedCommand('app:attributed'));
+
+        self::assertCount(2, $logger->records);
+        self::assertSecretStaysOutOfLoggedFrames(MonitoredAttributedCommand::UUID, $logger, [
+            MonitorConsoleSubscriber::class.'->onCommand',
+            MonitorConsoleSubscriber::class.'->onTerminate',
+            MonitorConsoleSubscriber::class.'->safePing',
+        ]);
+    }
 
     public function test_subscribes_to_command_error_and_terminate_events(): void
     {
@@ -517,6 +553,24 @@ final class MonitorConsoleSubscriberTest extends TestCase
         return null === $logger
             ? new MonitorConsoleSubscriber($client, $commandMap)
             : new MonitorConsoleSubscriber($client, $commandMap, $logger);
+    }
+
+    /**
+     * The events carry the command, the command its application, and the
+     * application the dispatcher holding the subscriber, as in a real run.
+     */
+    private function dispatchARunThroughTheApplication(MonitorConsoleSubscriber $subscriber, Command $command): void
+    {
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addSubscriber($subscriber);
+        $application = new Application();
+        $application->setDispatcher($dispatcher);
+        $command->setApplication($application);
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $dispatcher->dispatch(new ConsoleCommandEvent($command, $input, $output), ConsoleEvents::COMMAND);
+        $dispatcher->dispatch(new ConsoleTerminateEvent($command, $input, $output, Command::SUCCESS), ConsoleEvents::TERMINATE);
     }
 
     private function commandNamed(string $name): Command

@@ -6,9 +6,13 @@ namespace CronMonitor\Tests\Client;
 
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Support\BacktraceRecordingLogger;
+use CronMonitor\Tests\Support\FailingPsr17Factory;
 use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientExceptionInterface;
 
@@ -23,7 +27,67 @@ use Psr\Http\Client\ClientExceptionInterface;
  */
 final class CronMonitorClientLoggingTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     private const UUID = '550e8400-e29b-41d4-a716-446655440000';
+
+    /**
+     * @return iterable<string, array{\Closure(CronMonitorClient): mixed, string}>
+     */
+    public static function entryPoints(): iterable
+    {
+        yield 'heartbeat' => [static fn (CronMonitorClient $client) => $client->heartbeat(self::UUID, 'output'), 'heartbeat'];
+        yield 'start' => [static fn (CronMonitorClient $client) => $client->start(self::UUID), 'start'];
+        yield 'success' => [static fn (CronMonitorClient $client) => $client->success(self::UUID, 'output'), 'success'];
+        yield 'fail' => [static fn (CronMonitorClient $client) => $client->fail(self::UUID, 'output'), 'fail'];
+        yield 'ping' => [static fn (CronMonitorClient $client) => $client->ping(self::UUID, 'success', 'output'), 'ping'];
+    }
+
+    /**
+     * @param \Closure(CronMonitorClient): mixed $ping
+     */
+    #[DataProvider('entryPoints')]
+    public function test_a_logger_recording_a_backtrace_never_sees_the_uuid_in_an_sdk_frame(\Closure $ping, string $method): void
+    {
+        $logger = new BacktraceRecordingLogger();
+
+        $ping(self::clientThatFailsEveryPing($logger));
+
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [
+            CronMonitorClient::class.'->'.$method,
+            CronMonitorClient::class.'->dispatch',
+        ]);
+    }
+
+    public function test_a_rejected_uuid_stays_out_of_the_frames_its_error_is_logged_from(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $uuidWithStraySpace = self::UUID.' ';
+
+        self::clientThatFailsEveryPing($logger)->success($uuidWithStraySpace);
+
+        self::assertSame(['cron-monitor ping URL build failed'], array_column($logger->records, 'message'));
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [
+            CronMonitorClient::class.'->success',
+            CronMonitorClient::class.'->dispatch',
+        ]);
+    }
+
+    public function test_the_last_resort_warning_keeps_the_uuid_out_of_its_frames(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $factory = new FailingPsr17Factory(new \RuntimeException('cannot build a request'));
+        $client = new CronMonitorClient(new Configuration('https://cronheart.com'), new RecordingHttpClient([]), $factory, $factory, $logger);
+
+        $client->success(self::UUID);
+
+        self::assertCount(1, $logger->records);
+        self::assertNotContains(CronMonitorClient::class.'->dispatch', array_column($logger->records[0]['sdkFrames'], 'frame'));
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [
+            CronMonitorClient::class.'->success',
+            CronMonitorClient::class.'->ping',
+        ]);
+    }
 
     public function test_failure_warning_carries_the_hashed_monitor_uuid(): void
     {

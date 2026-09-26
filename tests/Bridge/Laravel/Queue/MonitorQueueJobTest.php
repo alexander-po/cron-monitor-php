@@ -7,15 +7,20 @@ namespace CronMonitor\Tests\Bridge\Laravel\Queue;
 use CronMonitor\Bridge\Laravel\Queue\MonitorQueueJob;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Container\Container;
+use Illuminate\Pipeline\Pipeline;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientExceptionInterface;
 
 final class MonitorQueueJobTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     private const UUID = '44444444-4444-4444-8444-444444444444';
 
     protected function tearDown(): void
@@ -145,6 +150,24 @@ final class MonitorQueueJobTest extends TestCase
         $result = $middleware->handle(new \stdClass(), static fn () => 'still ran');
 
         self::assertSame('still ran', $result);
+    }
+
+    public function test_a_failed_ping_keeps_the_uuid_out_of_the_frames_a_logger_records(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $middleware = new MonitorQueueJob(self::clientThatFailsEveryPing($logger), self::UUID);
+
+        $result = (new Pipeline(new Container()))
+            ->send(new \stdClass())
+            ->through([$middleware])
+            ->then(static fn (): string => 'still ran');
+
+        self::assertSame('still ran', $result);
+        self::assertCount(2, $logger->records);
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [
+            MonitorQueueJob::class.'->handle',
+            MonitorQueueJob::class.'->safePing',
+        ]);
     }
 
     private function buildMiddleware(RecordingHttpClient $http): MonitorQueueJob

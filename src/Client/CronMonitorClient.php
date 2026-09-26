@@ -83,7 +83,7 @@ final class CronMonitorClient
      * Generic heartbeat: `POST /ping/{uuid}` with no action segment.
      * Use this for the simplest one-shot "I ran, I'm alive" cron jobs.
      */
-    public function heartbeat(string $monitorUuid, ?string $body = null): PingResult
+    public function heartbeat(#[\SensitiveParameter] string $monitorUuid, ?string $body = null): PingResult
     {
         return $this->ping($monitorUuid, null, $body);
     }
@@ -92,22 +92,22 @@ final class CronMonitorClient
      * Mark the start of a run. The server pairs `start` + `success`/`fail`
      * to compute job duration without the client tracking time.
      */
-    public function start(string $monitorUuid): PingResult
+    public function start(#[\SensitiveParameter] string $monitorUuid): PingResult
     {
         return $this->ping($monitorUuid, 'start', null);
     }
 
-    public function success(string $monitorUuid, ?string $body = null): PingResult
+    public function success(#[\SensitiveParameter] string $monitorUuid, ?string $body = null): PingResult
     {
         return $this->ping($monitorUuid, 'success', $body);
     }
 
-    public function fail(string $monitorUuid, ?string $body = null): PingResult
+    public function fail(#[\SensitiveParameter] string $monitorUuid, ?string $body = null): PingResult
     {
         return $this->ping($monitorUuid, 'fail', $body);
     }
 
-    public function ping(string $monitorUuid, ?string $action, ?string $body): PingResult
+    public function ping(#[\SensitiveParameter] string $monitorUuid, ?string $action, ?string $body): PingResult
     {
         try {
             return $this->dispatch($monitorUuid, $action, $body);
@@ -132,7 +132,7 @@ final class CronMonitorClient
         }
     }
 
-    private function dispatch(string $monitorUuid, ?string $action, ?string $body): PingResult
+    private function dispatch(#[\SensitiveParameter] string $monitorUuid, ?string $action, ?string $body): PingResult
     {
         try {
             $url = $this->configuration->pingUrl($monitorUuid, $action);

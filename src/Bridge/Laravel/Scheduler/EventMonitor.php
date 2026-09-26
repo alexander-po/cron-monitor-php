@@ -25,22 +25,29 @@ use Illuminate\Console\Scheduling\Event;
  */
 final class EventMonitor
 {
+    /**
+     * The hooks capture the UUID as a `\SensitiveParameterValue`: the event
+     * holds them, and `print_r()` of any frame that receives the event or
+     * calls a hook would otherwise print the raw UUID.
+     */
     public static function install(Event $event, CronMonitorClient $client, string $monitorUuid): Event
     {
+        $uuid = new \SensitiveParameterValue($monitorUuid);
+
         return $event
-            ->before(static function () use ($client, $monitorUuid): void {
-                self::safe(static fn () => $client->start($monitorUuid));
+            ->before(static function () use ($client, $uuid): void {
+                self::safe(static fn () => $client->start($uuid->getValue()));
             })
-            ->onSuccess(static function () use ($client, $monitorUuid): void {
-                self::safe(static fn () => $client->success($monitorUuid));
+            ->onSuccess(static function () use ($client, $uuid): void {
+                self::safe(static fn () => $client->success($uuid->getValue()));
             })
-            ->onFailure(static function () use ($client, $monitorUuid): void {
+            ->onFailure(static function () use ($client, $uuid): void {
                 // Best-effort failure ping. We deliberately do not pass the
                 // exception body — Laravel's `onFailure` callback signature
                 // does not include the exception in older versions, and
                 // duplicating reflection across versions to extract it is
                 // not worth the surface for a marginal log-quality win.
-                self::safe(static fn () => $client->fail($monitorUuid));
+                self::safe(static fn () => $client->fail($uuid->getValue()));
             });
     }
 

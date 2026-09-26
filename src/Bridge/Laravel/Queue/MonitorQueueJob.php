@@ -132,7 +132,7 @@ final class MonitorQueueJob
     /**
      * @param callable():mixed $callback
      */
-    private function safePing(callable $callback): void
+    private function safePing(#[\SensitiveParameter] callable $callback): void
     {
         try {
             $callback();
@@ -155,5 +155,20 @@ final class MonitorQueueJob
             $error->getFile(),
             $error->getLine(),
         );
+    }
+
+    /**
+     * `print_r()` and `var_dump()` show the UUID the way PHP shows a
+     * `#[\SensitiveParameter]` argument: Laravel's pipeline holds this
+     * middleware, and so does the continuation `handle()` receives.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['monitorUuid'] = new \SensitiveParameterValue($this->monitorUuid);
+
+        return $properties;
     }
 }
