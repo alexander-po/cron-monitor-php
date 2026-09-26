@@ -29,7 +29,7 @@ final class ChannelSecret
      *
      * @throws \UnexpectedValueException when a field is missing or malformed
      */
-    public static function fromArray(array $data): self
+    public static function fromArray(#[\SensitiveParameter] array $data): self
     {
         return new self(
             Channel::fromArray($data),

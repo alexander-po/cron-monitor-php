@@ -27,7 +27,7 @@ final class SecretRedactor
      */
     public const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
-    private const API_KEY_PATTERN = 'cmk_[A-Za-z0-9_-]+';
+    public const API_KEY_PATTERN = 'cmk_[A-Za-z0-9_-]+';
 
     public static function redact(string $text): string
     {

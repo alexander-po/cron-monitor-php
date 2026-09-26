@@ -84,6 +84,127 @@ final class CronMonitorCommandTest extends TestCase
         self::assertStringContainsString(Configuration::DEFAULT_ENDPOINT, $stdout);
     }
 
+    public function test_signup_without_accepted_terms_names_the_documents_and_leaves_stdout_empty(): void
+    {
+        if (!\function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is disabled in this environment.');
+        }
+
+        $environment = getenv();
+        unset($environment['CRON_MONITOR_ENDPOINT']);
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, \dirname(__DIR__, 2).'/bin/cron-monitor', 'signup', 'you@example.com'], $environment);
+
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringContainsString(Configuration::DEFAULT_ENDPOINT.'/terms', $stderr);
+        self::assertStringContainsString(Configuration::DEFAULT_ENDPOINT.'/privacy', $stderr);
+    }
+
+    public function test_signup_refuses_a_plain_http_endpoint(): void
+    {
+        if (!\function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is disabled in this environment.');
+        }
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, \dirname(__DIR__, 2).'/bin/cron-monitor', 'signup', 'you@example.com', '--accept-terms', '--endpoint=http://127.0.0.1:9']);
+
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringStartsWith('Configuration error: Refusing to sign up over plain HTTP endpoint', $stderr);
+    }
+
+    public function test_signup_usage_errors_leave_stdout_empty_for_the_env_file(): void
+    {
+        if (!\function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is disabled in this environment.');
+        }
+        $cli = \dirname(__DIR__, 2).'/bin/cron-monitor';
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, $cli, 'signup']);
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringStartsWith('Missing email address.', $stderr);
+        self::assertStringContainsString('cron-monitor signup', $stderr);
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, $cli, 'signup', 'you@example.com', '--accept-terms', '--api-key=cmk_placeholder']);
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringStartsWith('Unknown argument: --api-key={api_key}', $stderr);
+        self::assertStringNotContainsString('cmk_placeholder', $stderr);
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, $cli, 'sigup', 'you@example.com']);
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout, 'a mistyped subcommand appended to an env file must add nothing');
+        self::assertStringStartsWith('Unknown command: sigup', $stderr);
+    }
+
+    public function test_php_diagnostics_while_loading_go_to_stderr(): void
+    {
+        if (!\function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is disabled in this environment.');
+        }
+        $cli = $this->installWithRuntimeDependenciesOnly();
+        $autoload = \dirname($cli, 4).'/autoload.php';
+        $loader = file_get_contents($autoload);
+        self::assertIsString($loader);
+        self::assertNotFalse(file_put_contents($autoload, str_replace('<?php ', '<?php trigger_error("load-time deprecation", E_USER_DEPRECATED); ', $loader)));
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, '-d', 'display_errors=1', '-d', 'log_errors=0', '-d', 'error_reporting=-1', $cli, 'signup', 'you@example.com']);
+
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringContainsString('load-time deprecation', $stderr);
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=0', '-d', 'error_reporting=-1', $cli, 'signup', 'you@example.com']);
+
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringNotContainsString('load-time deprecation', $stderr, 'display that was off stays off');
+    }
+
+    public function test_echoed_arguments_are_redacted_and_usage_errors_stay_off_stdout(): void
+    {
+        if (!\function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is disabled in this environment.');
+        }
+        $cli = \dirname(__DIR__, 2).'/bin/cron-monitor';
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, $cli, 'cmk_placeholder']);
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringStartsWith('Unknown command: {api_key}', $stderr);
+
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, $cli, 'heartbeat', self::UUID, '--api_key=cmk_placeholder']);
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+        self::assertStringStartsWith('Unknown argument: --api_key={api_key}', $stderr);
+
+        [$status, $stdout] = self::execute([\PHP_BINARY, $cli]);
+        self::assertSame(64, $status);
+        self::assertSame('', $stdout);
+    }
+
+    public function test_a_signup_that_cannot_connect_leaves_stdout_empty_with_only_the_runtime_dependencies(): void
+    {
+        if (!\function_exists('proc_open')) {
+            self::markTestSkipped('proc_open is disabled in this environment.');
+        }
+
+        [$status, $stdout, $stderr] = self::execute([
+            \PHP_BINARY,
+            $this->installWithRuntimeDependenciesOnly(),
+            'signup',
+            'you@example.com',
+            '--accept-terms',
+            '--endpoint=https://127.0.0.1:9',
+        ]);
+
+        self::assertSame(2, $status, 'stderr: '.$stderr);
+        self::assertSame('', $stdout);
+        self::assertStringStartsWith('The signup did not start:', $stderr);
+    }
+
     /**
      * Lay the package out as Composer would, behind an autoloader carrying
      * only what `composer.json` requires at runtime.
@@ -155,17 +276,20 @@ final class CronMonitorCommandTest extends TestCase
     }
 
     /**
-     * @param list<string> $command
+     * @param list<string>               $command
+     * @param array<string, string>|null $environment null inherits this process's environment
      *
      * @return array{int, string, string}
      */
-    private static function execute(array $command): array
+    private static function execute(array $command, ?array $environment = null): array
     {
         $pipes = [];
         $process = proc_open(
             $command,
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
+            null,
+            $environment,
         );
         self::assertIsResource($process);
 

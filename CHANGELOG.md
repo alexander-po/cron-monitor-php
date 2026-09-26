@@ -6,7 +6,62 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet — open a PR and add your entry under the appropriate subsection._
+A minor release: a cronheart.com account and its first API token can now come
+from the terminal. Additive apart from the entries under Changed; the
+existing wire mapping is untouched.
+
+### Added
+
+- **`vendor/bin/cron-monitor signup <email> --accept-terms`.** Creates an
+  account and its first API token without the web UI. The backend mails the
+  address one confirmation link; the command shows the code to type on that
+  page, polls at the server's interval (waiting out a `429`'s `Retry-After`,
+  never past the code's lifetime), and once the person confirms prints
+  `CRON_MONITOR_API_KEY=cmk_…` on standard output, once. Nothing else the
+  command writes goes there, so the documented capture, which also keeps
+  only that line, appends the token to a git-ignored env file without it
+  reaching the screen. Without `--accept-terms` it refuses and names the
+  terms and privacy URLs; an expired or already used request stops with the
+  server's recovery advice; a confirmation whose answer cannot be read stops
+  with the way back to a token instead of polling on; a plain-HTTP endpoint
+  is refused.
+- **`MonitorApiClient::startSignup()` and `pollSignupToken()`**, the two calls
+  behind the command, with the `SignupStarted` and `SignupToken` DTOs. They
+  send no token even when one is configured, refuse a plain-HTTP endpoint
+  whatever `allowInsecureEndpoint` says, and are never retried automatically.
+  `pollSignupToken()` returns `null` until the person confirms; its `410` is
+  the new `SignupExpiredException`, a subclass of
+  `UnexpectedResponseException`, so existing catches keep working. Only
+  `token` is required to read the confirmation; an answer without it is an
+  `ApiTransportException` carrying that answer's status. The device code and
+  every payload that carries it, the token or a rotated webhook secret are
+  `#[\SensitiveParameter]` arguments on the way through the client, the DTOs
+  and their hydration helpers, so an error tracker that records stack-frame
+  arguments does not receive them.
+
+### Changed
+
+- **The CLI's usage text after an argument error, and PHP's own error output,
+  go to standard error.** Both went to standard output; `--help` and a
+  delivered ping's `ok` line still print there. PHP's error output moves only
+  where displaying it was already on. An unknown flag or command is echoed
+  back with any API token or monitor UUID in it redacted.
+- **A management-API answer that is not valid JSON no longer chains a
+  `\JsonException`.** The `ApiTransportException` names the decoder's error in
+  its message instead, so the raw body, which can hold a one-time secret,
+  stays out of the exception chain.
+
+### Documentation
+
+- **The agent recipe starts the token step with the signup command.**
+  `skills/add-cronheart/SKILL.md` and `AGENTS.md` send an agent to
+  `cron-monitor signup` when the person has no account: run in the background
+  with the person's own consent to the terms, both streams in private
+  temporary files, and only the token line appended to the git-ignored env
+  file, only on success. Creating a token in the dashboard stays the path for
+  an existing account. The README and the `Configuration::$apiKey` docblock
+  now name that dashboard page Account → API tokens, as cronheart.com does,
+  instead of "Settings → API Tokens".
 
 ## [1.4.2] — 2026-09-25
 

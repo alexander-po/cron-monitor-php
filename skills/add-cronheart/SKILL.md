@@ -187,8 +187,35 @@ fi
 
 ## Step 5: get an API token
 
-1. Sign in at cronheart.com and open Account, then API tokens (`https://cronheart.com/account/api-tokens`). Create a token. Tokens are issued on every plan, including Free, once the account's email address is verified. Before the Free plan gained API access this page was a Starter-and-up feature; if `https://cronheart.com/pricing` does not list REST API access on the Free plan, that install predates the change and step 6 falls back to 6c.
-2. Export the token where the sync will run: `CRON_MONITOR_API_KEY=cmk_xxxxxxxxxxxxxxxx` in the shell environment or `.env.local`. Symfony resolves `%env()%` at runtime, so no cache clear is needed. Never write it into YAML, PHP or a command line.
+Steps 6 and 7c need a token. Ask the person whether they already have a cronheart.com account: without one, 5a creates the account and its first token from the terminal; with one, go to 5b.
+
+5a. Sign up from the terminal. The person takes part twice: they accept the terms, and they type a code from a mail.
+
+1. Ask for the email address to sign up with, and whether the person accepts the Terms of Service (`https://cronheart.com/terms`) and the Privacy Policy (`https://cronheart.com/privacy`). Pass `--accept-terms` only on their yes: the flag states their consent, not yours.
+2. Pick the file that holds the application's secrets, `.env.local` on Symfony or `.env` on Laravel (`<env>` below), check that git ignores it (`git check-ignore -q <env>` must succeed), and remove an existing `CRON_MONITOR_API_KEY` line from it. Then start the command in the background, since it prints a code and then waits up to 30 minutes for the person. Both of its streams go to private temporary files, and the address is single-quoted because it goes through the shell:
+
+   ```bash
+   log=$(mktemp) && out=$(mktemp) && echo "log $log out $out"
+   nohup vendor/bin/cron-monitor signup 'you@example.com' --accept-terms > "$out" 2> "$log" &
+   echo "pid $!"
+   ```
+
+   Note the three values the `echo`s print; later steps use them as `<log>`, `<out>` and `<pid>`. Whatever happens next, finish by deleting `<log>` and `<out>`: once the command has confirmed, `<out>` holds the token. A person running it in their own terminal can use the one-line form in the README instead; the code then shows on screen.
+3. Read the code: `grep -E '^    [A-Z]{4}-[A-Z]{4}$' <log>` prints it, such as `BCDF-GHJK`. Tell the person to open the mail from cronheart.com and type that code on the page the mail links to; the mail itself never carries the code.
+4. Wait until the process has exited (`kill -0 <pid>` fails). Then append the token line, only if the command wrote it, and delete `<out>` only once the append succeeded:
+
+   ```bash
+   (umask 077; line=$(grep -E '^CRON_MONITOR_API_KEY=cmk_[A-Za-z0-9_-]+$' <out>) && printf '\n%s\n' "$line" >> <env>) && rm -f <out>
+   ```
+
+   `grep -c '^CRON_MONITOR_API_KEY=' <env>` then prints `1` when the signup succeeded; do not print either file or the line. If the log ends with `Confirmed:` but the append failed, fix what blocked it (a read-only or root-owned file, a full disk) and run the append again. Otherwise the log's last message says why the signup did not complete: the code expired, a throttle, or signup is switched off. Delete `<log>`, and `<out>` if it is still there; the log holds the address and the code, never the token.
+5. An address that already has an account never confirms (an active account gets a mail saying so): if `ps -p <pid> -o args=` still shows `cron-monitor signup`, stop it with `kill <pid>`. Delete `<log>` and `<out>` and use 5b.
+
+The new account has no password. To sign in on the web, the person uses "Forgot password" on the sign-in page.
+
+5b. With an existing account, sign in at cronheart.com and open Account, then API tokens (`https://cronheart.com/account/api-tokens`). Create a token. Tokens are issued on every plan, including Free, once the account's email address is verified. Before the Free plan gained API access this page was a Starter-and-up feature; if `https://cronheart.com/pricing` does not list REST API access on the Free plan, that install predates the change and step 6 falls back to 6c. Put `CRON_MONITOR_API_KEY=cmk_xxxxxxxxxxxxxxxx` with the real token into the same file as in 5a, or into the shell environment where the sync will run.
+
+Either way the token lives only in that file or the environment. Symfony resolves `%env()%` at runtime, so no cache clear is needed. Never write it into YAML, PHP or a command line.
 
 ## Step 6: create the monitors
 
@@ -280,7 +307,7 @@ Only the management client throws (`MonitorApiClient`, and `cron-monitor:sync --
 | `ConflictException` | 409 | The request conflicts with the current state, such as a disabled notification transport. | Read `detail`. |
 | `ValidationException` | 422 | A field was rejected; `errors` maps field to message. | Fix the schedule expression or timezone. |
 | `RateLimitException` | 429 | The account's request limit for its plan; `retryAfter` is the wait in seconds. | Wait and rerun; creates are never retried automatically. |
-| `UnexpectedResponseException` | 400, 5xx, other | A malformed request or a server error. | Rerun later. `ChannelDeliveryException` is its 502 subclass, raised only by `testChannel()` when the destination refused the test alert. |
+| `UnexpectedResponseException` | 400, 5xx, other | A malformed request or a server error. | Rerun later. `ChannelDeliveryException` is its 502 subclass, raised only by `testChannel()` when the destination refused the test alert; `SignupExpiredException` is its 410 subclass, raised only by `pollSignupToken()` when a signup is expired or already used. |
 
 The sync command's own message `cron-monitor:sync --apply/--dry-run needs an API token` means `api_key` resolved to `null`: step 5.
 

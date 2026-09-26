@@ -309,6 +309,41 @@ fi
 Set `CRON_MONITOR_ENDPOINT` and `CRON_MONITOR_API_KEY` in the environment
 to avoid repeating the flags.
 
+### Signing up from the terminal
+
+No cronheart.com account yet? The same binary creates one and prints its
+first API token. Append it to the env file your framework loads and git
+ignores, `.env.local` on Symfony or `.env` on Laravel:
+
+```bash
+git check-ignore -q .env.local && (umask 077; line=$(vendor/bin/cron-monitor signup 'you@example.com' --accept-terms | grep -E '^CRON_MONITOR_API_KEY=cmk_[A-Za-z0-9_-]+$') && printf '\n%s\n' "$line" >> .env.local)
+```
+
+`--accept-terms` states that you agree to the
+[Terms of Service](https://cronheart.com/terms) and the
+[Privacy Policy](https://cronheart.com/privacy); without it the command
+refuses and names both. A mail with one confirmation link goes to the
+address. The command shows a code such as `BCDF-GHJK` and waits, up to 30
+minutes, while you open the link and type the code on that page. Once you
+confirm, it prints `CRON_MONITOR_API_KEY=cmk_…` on standard output, once,
+and exits 0; that is the variable the SDK reads its token from. Everything
+else goes to standard error, so the line above appends the token, on a line
+of its own and only when the signup succeeded, without it reaching the
+screen; the `grep` keeps anything else PHP might print, such as a startup
+warning, out of the file, `umask 077` keeps a new file private, and
+`git check-ignore` stops the line before the signup starts when git would
+commit the file (outside a git repository, drop it and pick the file with
+care). Quote the address: it goes through the shell.
+
+An address that already has an account never confirms (an active account
+gets a mail saying so): stop the command and create a token in the
+dashboard (Account → API tokens) instead. The new account has no password;
+to sign in on the web, use "Forgot password" on the sign-in page. Exit
+codes: `0` the token was printed, `2` the signup did not complete (the code
+expired, a throttle, or signup is switched off; the message says which),
+`64` a usage error. A signup always goes over HTTPS: a plain-HTTP
+`--endpoint` is refused.
+
 ## Managing monitors via the API
 
 Everything above is the **ping** path — anonymous, never throws, never
@@ -320,9 +355,11 @@ This client is the deliberate opposite of the ping client: it **throws**
 typed exceptions, because you call it from admin screens or CLI tooling
 where you want to know — and react — when something fails.
 
-Authenticate with a Personal Access Token (`cmk_…`) created in the
-cronheart.com dashboard (Settings → API Tokens). Every plan includes the
-API, Free too; requests are rate-limited per account — 30 a minute on
+Authenticate with a Personal Access Token (`cmk_…`). Without an account,
+`vendor/bin/cron-monitor signup` creates one and prints its first token
+([Signing up from the terminal](#signing-up-from-the-terminal)); with one,
+create a token in the cronheart.com dashboard (Account → API tokens). Every
+plan includes the API, Free too; requests are rate-limited per account — 30 a minute on
 Free, more on the paid tiers (120 Starter, 300 Growth, 600 Scale). The
 token rides on `Configuration::apiKey`:
 
@@ -487,6 +524,53 @@ backend dedups a replay carrying the same key and body:
 ```php
 $api->createMonitor($request, idempotencyKey: 'deploy-2026-06-19-nightly');
 ```
+
+**Signing up from code (1.5.0).** The two calls behind
+`cron-monitor signup` are on the client too, for a setup wizard or an
+installer of your own. They take no token:
+
+```php
+use CronMonitor\Api\Exception\RateLimitException;
+use CronMonitor\Api\MonitorApiClient;
+
+$api = MonitorApiClient::create();
+
+$started = $api->startSignup('you@example.com', acceptTerms: true);
+// Server text on a terminal: strip control and format characters first.
+$code = preg_replace('/[\p{Cc}\p{Cf}]+/u', ' ', $started->userCode)
+    ?? preg_replace('/[^\x20-\x7E]+/', ' ', $started->userCode);
+echo "Open the mail and type {$code} on the page it links to.\n";
+
+$waited = 0;
+$wait = $started->interval;
+while ($waited < $started->expiresIn) {
+    sleep($wait);
+    $waited += $wait;
+    $wait = $started->interval;
+    try {
+        $token = $api->pollSignupToken($started->deviceCode);
+    } catch (RateLimitException $e) {
+        $wait = max($started->interval, $e->retryAfter ?? $started->interval);
+        continue;
+    }
+    if (null !== $token) {
+        storeSecret('CRON_MONITOR_API_KEY', $token->token); // returned once; never log it
+        break;
+    }
+}
+```
+
+`acceptTerms: true` states that the person agreed to the terms and the
+privacy policy; `false` is refused before any request. Both calls send no
+token even when one is configured, refuse a plain-HTTP endpoint, and are
+never retried automatically: a replayed start mails the address again, and
+the poll loop is the retry. `$started->deviceCode` is a secret, since
+whoever holds it can claim the token once the person confirms; keep it out
+of output and logs. A `410` is `SignupExpiredException`, a subclass of
+`UnexpectedResponseException`: the request expired, was cancelled or was
+already claimed, and its `detail` says how to recover. Like any text from
+the server, `userCode` and `detail` are cleaned of control characters before
+they reach a terminal, as above.
 
 ### Auto-creating monitors from your scheduler
 
