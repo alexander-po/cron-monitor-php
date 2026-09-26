@@ -420,9 +420,8 @@ final class MonitorApiClientTest extends TestCase
         $client = new MonitorApiClient(new Configuration('https://cronheart.com', apiKey: 'cmk_x'), $http, $factory, $factory);
 
         // A monitor name carrying an invalid UTF-8 byte makes json_encode
-        // throw \JsonException; that must surface as an ApiException (the
-        // documented catch-all), not leak the raw \JsonException, and no
-        // HTTP request must be attempted.
+        // fail; that must surface as an ApiException (the documented
+        // catch-all), and no HTTP request must be attempted.
         try {
             $client->createMonitor(new CreateMonitorRequest("bad\xB1name", ScheduleKind::Cron, '0 2 * * *'));
             self::fail('Expected an exception.');

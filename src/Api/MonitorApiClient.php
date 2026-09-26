@@ -452,7 +452,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    public function createChannel(CreateChannelRequest $request, ?string $idempotencyKey = null): Channel
+    public function createChannel(#[\SensitiveParameter] CreateChannelRequest $request, ?string $idempotencyKey = null): Channel
     {
         [$headers, $retryable] = $this->idempotency($idempotencyKey);
 
@@ -733,7 +733,7 @@ final class MonitorApiClient
      *
      * @throws ApiException
      */
-    private function requestJson(string $method, string $path, ?array $body, bool $retryable, array $extraHeaders = []): array
+    private function requestJson(string $method, string $path, #[\SensitiveParameter] ?array $body, bool $retryable, array $extraHeaders = []): array
     {
         return $this->readJsonObject($this->send($this->buildRequest($method, $path, $body, $extraHeaders), $retryable));
     }
@@ -835,17 +835,12 @@ final class MonitorApiClient
         }
 
         if (null !== $body) {
-            // JSON_THROW_ON_ERROR can fire here — most plausibly when a
-            // caller-supplied string (a monitor name / schedule_expr read
-            // from a filename, a legacy-encoded DB column, request input)
-            // contains invalid UTF-8. Re-wrap as an ApiException so the
-            // documented "callers only catch ApiException" contract holds;
-            // deliberately do NOT echo $body into the message (it carries
-            // the monitor name).
-            try {
-                $json = json_encode($body, \JSON_THROW_ON_ERROR);
-            } catch (\JsonException $e) {
-                throw new ApiTransportException('Could not encode the request body as JSON; a string field (e.g. the monitor name or schedule) may contain invalid UTF-8.', null, null, null, $e);
+            // Neither the body nor a chained encoder exception may reach the
+            // ApiException: the encoder's trace holds the body, and the body
+            // can carry a channel's webhook URL and signing secret.
+            $json = json_encode($body);
+            if (false === $json) {
+                throw new ApiTransportException(\sprintf('Could not encode the request body as JSON: %s.', json_last_error_msg()));
             }
 
             $request = $request
