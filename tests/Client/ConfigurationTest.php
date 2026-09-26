@@ -9,6 +9,7 @@ use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use Nyholm\Psr7\Factory\Psr17Factory;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class ConfigurationTest extends TestCase
@@ -93,15 +94,6 @@ final class ConfigurationTest extends TestCase
         );
     }
 
-    public function test_ping_url_appends_action_segment_when_provided(): void
-    {
-        $config = new Configuration('https://cronheart.com');
-        self::assertSame(
-            'https://cronheart.com/ping/00000000-0000-4000-a000-000000000000/start',
-            $config->pingUrl('00000000-0000-4000-a000-000000000000', 'start'),
-        );
-    }
-
     public function test_ping_url_rejects_invalid_uuid(): void
     {
         $config = new Configuration('https://cronheart.com');
@@ -122,9 +114,70 @@ final class ConfigurationTest extends TestCase
     {
         $config = new Configuration('https://cronheart.com');
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('not a valid ping action');
+        $this->expectExceptionMessage('The ping action is not valid');
         // Path traversal attempt — must be rejected before being concatenated.
         $config->pingUrl('00000000-0000-4000-a000-000000000000', '../admin');
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function storedActions(): iterable
+    {
+        foreach (['run', 'RUN', 'start', 'Start', 'success', 'SUCCESS', 'ok', 'OK', 'fail', 'Fail'] as $action) {
+            yield $action => [$action];
+        }
+        yield 'exit code 0' => ['0'];
+        yield 'exit code 137' => ['137'];
+        yield 'sixteen digits' => ['1234567890123456'];
+    }
+
+    #[DataProvider('storedActions')]
+    public function test_ping_url_accepts_every_action_the_service_stores(string $action): void
+    {
+        $config = new Configuration('https://cronheart.com');
+
+        self::assertSame(
+            'https://cronheart.com/ping/00000000-0000-4000-a000-000000000000/'.$action,
+            $config->pingUrl('00000000-0000-4000-a000-000000000000', $action),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unstoredActions(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'unknown word' => ['foo'];
+        yield 'near miss' => ['failed'];
+        yield 'heartbeat is the bare URL' => ['heartbeat'];
+        yield 'suffixed' => ['start_'];
+        yield 'negative exit code' => ['-1'];
+        yield 'seventeen digits' => ['12345678901234567'];
+        yield 'trailing newline' => ["start\n"];
+        yield 'exit code with a trailing newline' => ["0\n"];
+    }
+
+    #[DataProvider('unstoredActions')]
+    public function test_ping_url_rejects_an_action_the_service_does_not_store(string $action): void
+    {
+        $config = new Configuration('https://cronheart.com');
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('The ping action is not valid');
+        $config->pingUrl('00000000-0000-4000-a000-000000000000', $action);
+    }
+
+    public function test_a_rejected_ping_action_is_not_echoed(): void
+    {
+        $config = new Configuration('https://cronheart.com');
+
+        try {
+            $config->pingUrl('00000000-0000-4000-a000-000000000000', self::UUID);
+            self::fail('Expected an InvalidArgumentException.');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame('The ping action is not valid (expected run, start, success, ok or fail, case-insensitive, or 1 to 16 digits such as an exit code).', $e->getMessage());
+        }
     }
 
     public function test_constructor_rejects_an_api_key_over_plain_http(): void

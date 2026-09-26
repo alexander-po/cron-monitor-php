@@ -61,4 +61,9 @@ final class UpdateMonitorRequestTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         new UpdateMonitorRequest(channelIds: ['0']);
     }
+
+    public function test_a_channel_id_with_a_trailing_newline_is_sent_as_given(): void
+    {
+        self::assertSame(['channel_ids' => ["7\n"]], (new UpdateMonitorRequest(channelIds: ["7\n"]))->toArray());
+    }
 }

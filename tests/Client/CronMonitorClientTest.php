@@ -11,6 +11,7 @@ use CronMonitor\Tests\Support\LocalHttpServer;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
@@ -219,6 +220,39 @@ final class CronMonitorClientTest extends TestCase
             static fn (array $r) => 'error' === $r['level'],
         );
         self::assertCount(1, $errors);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unstoredActions(): iterable
+    {
+        yield 'trailing newline' => ["start\n"];
+        yield 'near miss' => ['failed'];
+    }
+
+    #[DataProvider('unstoredActions')]
+    public function test_an_action_the_service_does_not_store_fails_without_calling_http(string $action): void
+    {
+        $http = new RecordingHttpClient([new Response(404)]);
+        $factory = new HttpFactory();
+        $logger = new InMemoryLogger();
+        $client = new CronMonitorClient(
+            new Configuration('https://cronheart.com'),
+            $http,
+            $factory,
+            $factory,
+            $logger,
+        );
+
+        $result = $client->ping('00000000-0000-4000-a000-000000000000', $action, null);
+
+        self::assertSame([], $http->requests);
+        self::assertFalse($result->delivered);
+        self::assertNull($result->statusCode);
+        self::assertSame(0, $result->attempts);
+        self::assertStringStartsWith('The ping action is not valid', (string) $result->errorMessage);
+        self::assertSame(['error'], array_column($logger->records, 'level'));
     }
 
     public function test_authorization_header_is_attached_when_api_key_is_configured(): void

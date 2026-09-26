@@ -107,6 +107,11 @@ final class CronMonitorClient
         return $this->ping($monitorUuid, 'fail', $body);
     }
 
+    /**
+     * `$action` is `null` (a heartbeat), `run`, `start`, `success`, `ok` or
+     * `fail` (case-insensitive), or 1 to 16 digits such as an exit code. Any
+     * other is logged at `error` and returned as a failed result, unsent.
+     */
     public function ping(#[\SensitiveParameter] string $monitorUuid, ?string $action, ?string $body): PingResult
     {
         try {
@@ -137,12 +142,12 @@ final class CronMonitorClient
         try {
             $url = $this->configuration->pingUrl($monitorUuid, $action);
         } catch (\InvalidArgumentException $e) {
-            // A bad UUID is a programmer error, not a network error — log it
-            // loudly but still return a result so the host job continues.
+            // A bad UUID or action is a programmer error: log it loudly but still
+            // return a result so the host job continues. The action, unchecked
+            // or rejected here, is left out: a swapped argument makes it a UUID.
             $error = self::scrub($e->getMessage(), $monitorUuid);
             $this->log(LogLevel::ERROR, 'cron-monitor ping URL build failed', [
                 'monitor_uuid_hash' => self::hashUuid($monitorUuid),
-                'action' => $action,
                 'error' => $error,
             ]);
 

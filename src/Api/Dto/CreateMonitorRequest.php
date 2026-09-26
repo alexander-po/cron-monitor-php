@@ -51,6 +51,9 @@ final class CreateMonitorRequest
     /**
      * A positive channel id, whether given as an int (>= 1) or a numeric string
      * (no sign, no leading zero) like the {@see Channel::$id} the API returns.
+     * One trailing newline passes (no `D`): in a request body the service reads
+     * it as the number. A path segment must not end in one, which the API
+     * client checks on top of this.
      */
     public static function isPositiveChannelId(int|string $id): bool
     {

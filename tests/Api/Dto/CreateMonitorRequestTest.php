@@ -73,4 +73,11 @@ final class CreateMonitorRequestTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         new CreateMonitorRequest('Nightly', ScheduleKind::Cron, '0 2 * * *', channelIds: ['0']);
     }
+
+    public function test_a_channel_id_with_a_trailing_newline_is_sent_as_given(): void
+    {
+        $request = new CreateMonitorRequest('Nightly', ScheduleKind::Cron, '0 2 * * *', channelIds: ["7\n"]);
+
+        self::assertSame(["7\n"], $request->toArray()['channel_ids']);
+    }
 }
