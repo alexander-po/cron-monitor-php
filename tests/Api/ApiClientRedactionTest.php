@@ -82,6 +82,36 @@ final class ApiClientRedactionTest extends TestCase
         );
     }
 
+    public function test_a_uuid_with_a_trailing_newline_is_rejected_before_the_route_names_it(): void
+    {
+        $client = $this->clientThatFailsWith('connection refused');
+
+        try {
+            $client->getMonitor(self::UUID."\n");
+            self::fail('Expected an InvalidArgumentException.');
+        } catch (\InvalidArgumentException|ApiTransportException $e) {
+            self::assertStringNotContainsStringIgnoringCase(self::UUID, $e->getMessage());
+            self::assertInstanceOf(\InvalidArgumentException::class, $e);
+        }
+    }
+
+    public function test_a_uuid_with_a_trailing_newline_leaves_no_route_in_the_log(): void
+    {
+        $logger = new InMemoryLogger();
+        $client = $this->clientThatFailsWith('connection refused', $logger);
+
+        try {
+            $client->deleteMonitor(self::UUID."\n");
+        } catch (\InvalidArgumentException|ApiTransportException) {
+        }
+
+        self::assertStringNotContainsStringIgnoringCase(
+            self::UUID,
+            json_encode($logger->records, \JSON_THROW_ON_ERROR),
+        );
+        self::assertSame([], $logger->records);
+    }
+
     public function test_transport_failure_redacts_a_numeric_channel_id(): void
     {
         $logger = new InMemoryLogger();

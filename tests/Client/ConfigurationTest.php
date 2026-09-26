@@ -110,6 +110,14 @@ final class ConfigurationTest extends TestCase
         $config->pingUrl('not-a-uuid');
     }
 
+    public function test_ping_url_rejects_a_uuid_with_a_trailing_newline(): void
+    {
+        $config = new Configuration('https://cronheart.com');
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('not a valid cron-monitor UUID');
+        $config->pingUrl("00000000-0000-4000-a000-000000000000\n");
+    }
+
     public function test_ping_url_rejects_dangerous_action_segment(): void
     {
         $config = new Configuration('https://cronheart.com');

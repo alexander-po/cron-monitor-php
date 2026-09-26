@@ -45,6 +45,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `zend.exception_ignore_args=1`, which `php.ini-production` sets (PHP's
   built-in default and the official Docker images leave it at `0`), exception
   traces carry no arguments; `debug_backtrace()` still does.
+- **A monitor UUID with a trailing newline is rejected before any request.**
+  A regex `$` also matches before a final newline, so `Configuration::pingUrl()`
+  and every `MonitorApiClient` method that takes a UUID accepted `"<uuid>\n"`,
+  the shape a value read from a file often has. The newline stayed in the
+  request path, percent-encoded by guzzlehttp/psr7 and turned into `_` by
+  nyholm/psr7, and there neither the route placeholder nor the ping client's
+  scrub recognised the UUID: on a transport failure the whole UUID reached the
+  `ApiTransportException` message and the `route` log context, and, with a
+  PSR-18 client that quotes the request URI in its errors as Guzzle does, the
+  ping client's `last_error` log context and `PingResult::$errorMessage`. The
+  service never routed such a path, so the call could only fail. The
+  management client now throws its usual `\InvalidArgumentException` in place
+  of a `NotFoundException`; the ping client, where the `404` failed silently,
+  now logs its URL-build error at `error` level and returns a failed result
+  without sending anything.
 
 ### Changed
 
@@ -54,9 +69,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `\JsonException`'s own trace held the whole body, secrets included.
 - **A malformed monitor UUID is no longer quoted in the
   `\InvalidArgumentException` the management client throws.** The message now
-  reads "The monitor identifier is not a valid cron-monitor UUID.", as
-  `Configuration::pingUrl()` already did: a value that fails the check, such as
-  a UUID with a stray space, can still hold the real one.
+  reads "The monitor identifier is not a valid cron-monitor UUID (check for
+  whitespace, e.g. a trailing newline).", the same text
+  `Configuration::pingUrl()` now uses, so the ping client's
+  `PingResult::$errorMessage` and `error` log context carry it too: a value
+  that fails the check, such as a UUID with a stray space, can still hold the
+  real one.
 
 ## [1.5.0] — 2026-09-26
 

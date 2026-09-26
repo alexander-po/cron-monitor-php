@@ -121,8 +121,8 @@ final class Configuration
         // log record and a PingResult, and a value that merely fails the
         // anchored match can still contain a real UUID (a stray space, a
         // trailing newline out of a config file).
-        if (1 !== preg_match('/^'.self::UUID_PATTERN.'$/i', $monitorUuid)) {
-            throw new \InvalidArgumentException('The monitor identifier is not a valid cron-monitor UUID.');
+        if (1 !== preg_match('/^'.self::UUID_PATTERN.'$/iD', $monitorUuid)) {
+            throw new \InvalidArgumentException('The monitor identifier is not a valid cron-monitor UUID (check for whitespace, e.g. a trailing newline).');
         }
 
         $base = rtrim($this->endpoint, '/').'/ping/'.$monitorUuid;

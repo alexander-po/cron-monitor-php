@@ -671,8 +671,8 @@ final class MonitorApiClient
      */
     private function assertUuid(#[\SensitiveParameter] string $uuid): void
     {
-        if (1 !== preg_match('/^'.SecretRedactor::UUID_PATTERN.'$/i', $uuid)) {
-            throw new \InvalidArgumentException('The monitor identifier is not a valid cron-monitor UUID.');
+        if (1 !== preg_match('/^'.SecretRedactor::UUID_PATTERN.'$/iD', $uuid)) {
+            throw new \InvalidArgumentException('The monitor identifier is not a valid cron-monitor UUID (check for whitespace, e.g. a trailing newline).');
         }
     }
 
