@@ -44,7 +44,7 @@ final class CurlPsr18Client implements ClientInterface
         }
     }
 
-    public function sendRequest(RequestInterface $request): ResponseInterface
+    public function sendRequest(#[\SensitiveParameter] RequestInterface $request): ResponseInterface
     {
         $handle = curl_init();
         if (false === $handle) {

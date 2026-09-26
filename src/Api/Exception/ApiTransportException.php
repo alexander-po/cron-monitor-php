@@ -11,9 +11,13 @@ namespace CronMonitor\Api\Exception;
  * hydrated into the expected DTO.
  *
  * `$statusCode` is null for genuine transport failures, which chain the
- * PSR-18 client's exception as `$previous`. A body that could not be hydrated
- * chains the hydration error; a body that could not be encoded or decoded as
- * JSON chains nothing and names the JSON error in the message instead.
+ * PSR-18 client's exception as `$previous`. That exception keeps the request,
+ * API token and monitor URL included: in its properties, where only
+ * `CurlException` hides it from `print_r()` and `var_dump()`, and, for a
+ * client other than the bundled `CurlPsr18Client`, in its frames. A body that
+ * could not be hydrated chains the hydration error; a body that could not be
+ * encoded or decoded as JSON chains nothing and names the JSON error in the
+ * message instead.
  */
 final class ApiTransportException extends ApiException
 {

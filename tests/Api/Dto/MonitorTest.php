@@ -9,10 +9,13 @@ use CronMonitor\Api\Dto\MonitorChannel;
 use CronMonitor\Api\Dto\MonitorStatus;
 use CronMonitor\Api\Dto\ScheduleKind;
 use CronMonitor\Api\Dto\UpdateMonitorRequest;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class MonitorTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     /**
      * @param array<string, mixed> $overrides
      *
@@ -230,5 +233,17 @@ final class MonitorTest extends TestCase
         // half-built channel with empty kind/label.
         $this->expectException(\UnexpectedValueException::class);
         Monitor::fromArray(self::payload(['channels' => ['3']]));
+    }
+
+    public function test_a_malformed_monitor_keeps_its_uuid_out_of_trace_arguments(): void
+    {
+        $uuid = '5d8c1f37-2a64-4e9b-8f03-c7a1e6b4d290';
+        $identified = ['uuid' => $uuid, 'ping_url' => 'https://cronheart.com/ping/'.$uuid, 'badge_url' => 'https://cronheart.com/badge/'.$uuid.'.svg'];
+
+        foreach ([['grace_seconds' => 'sixty'], ['channels' => 'email']] as $malformed) {
+            $payload = self::payload($malformed + $identified);
+
+            $this->assertSecretStaysOutOfTraces($uuid, static fn () => Monitor::fromArray($payload), \UnexpectedValueException::class);
+        }
     }
 }

@@ -41,6 +41,31 @@ trait SecretTraceAssertions
     }
 
     /**
+     * `print_r()` of the exception the call throws, recorded without frame
+     * arguments, so the dump shows only what the objects themselves carry.
+     *
+     * @param \Closure(): mixed        $call
+     * @param class-string<\Throwable> $expected
+     */
+    private static function printedWithoutFrameArguments(\Closure $call, string $expected): string
+    {
+        $previous = ini_set('zend.exception_ignore_args', '1');
+        try {
+            $call();
+        } catch (\Throwable $e) {
+            if (!$e instanceof $expected) {
+                throw $e;
+            }
+
+            return print_r($e, true);
+        } finally {
+            ini_set('zend.exception_ignore_args', false === $previous ? '0' : $previous);
+        }
+
+        self::fail(\sprintf('Expected %s.', $expected));
+    }
+
+    /**
      * The arguments of every frame between the throw and the test, built-in
      * functions included. Frames of any class under the tests' namespace, and
      * PHPUnit's, hold the fixtures, so the walk stops at the first one: a test

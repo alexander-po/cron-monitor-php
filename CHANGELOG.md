@@ -18,8 +18,33 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `webhookUrl` / `secret` parameters of `CreateChannelRequest`'s constructor
   and of its `slack()`, `discord()` and `webhook()` factories are now
   `#[\SensitiveParameter]`, so a request the DTO rejects is covered too. The
-  PSR-7 request still reaches the PSR-18 client, whose frames the SDK does not
-  control; the body sits in its stream, not in a string argument.
+  PSR-7 request still reaches the PSR-18 client (the next entry says what a
+  client's exception keeps); the body sits in its stream, not in a string
+  argument.
+- **A failed call no longer hands the API token or a monitor UUID to
+  stack-frame arguments.** A monitor's UUID is the credential on its ping
+  endpoint, and the token authenticates the whole account. Every
+  `MonitorApiClient` method that takes a UUID, the client's internal request
+  path, `Monitor::fromArray()` (which also reads the new UUID
+  `rotateMonitorUuid()` returns), `MonitorPage::fromArray()`,
+  `Configuration`'s `apiKey` (constructor and `withDefaultEndpoint()`) and
+  `pingUrl()`'s UUID are now `#[\SensitiveParameter]`. So is the PSR-7 request
+  in the client's retry loop and in `CurlPsr18Client::sendRequest()`, which
+  hides the `Authorization` header and the request URL with it. `print_r()`
+  and `var_dump()` show the token of a `Configuration`, on its own or inside a
+  client, and the request a `CurlException` keeps, as a
+  `SensitiveParameterValue`; `var_export()`, `json_encode()` and Symfony's
+  VarDumper still read `Configuration`'s public `apiKey`, and
+  `CurlException::getRequest()` still returns the request. Still exposed: a
+  PSR-18 client other than the bundled `CurlPsr18Client`, the Symfony
+  bundle's default `Psr18Client` among them, keeps the request, header
+  included, in its own exception's frames and properties, and
+  `ApiTransportException::getPrevious()` chains that exception unchanged; and
+  `CronMonitorClient`'s own `$monitorUuid` parameters are not marked, so a
+  logger that records a backtrace sees them. With
+  `zend.exception_ignore_args=1`, which `php.ini-production` sets (PHP's
+  built-in default and the official Docker images leave it at `0`), exception
+  traces carry no arguments; `debug_backtrace()` still does.
 
 ### Changed
 
@@ -27,6 +52,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `\JsonException`.** The `ApiTransportException` names the encoder's error in
   its message instead, and its `getPrevious()` is now `null`: the
   `\JsonException`'s own trace held the whole body, secrets included.
+- **A malformed monitor UUID is no longer quoted in the
+  `\InvalidArgumentException` the management client throws.** The message now
+  reads "The monitor identifier is not a valid cron-monitor UUID.", as
+  `Configuration::pingUrl()` already did: a value that fails the check, such as
+  a UUID with a stray space, can still hold the real one.
 
 ## [1.5.0] — 2026-09-26
 
