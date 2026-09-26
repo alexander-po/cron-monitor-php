@@ -281,7 +281,7 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
     /**
      * @param callable():mixed $callback
      */
-    private function safePing(callable $callback): void
+    private function safePing(#[\SensitiveParameter] callable $callback): void
     {
         try {
             $callback();
@@ -302,5 +302,22 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
             $error->getFile(),
             $error->getLine(),
         );
+    }
+
+    /**
+     * `print_r()` and `var_dump()` show the UUIDs the way PHP shows a
+     * `#[\SensitiveParameter]` argument: a console event reaches this
+     * subscriber through its command, application and dispatcher, and so does
+     * every frame that receives one, `onCommand()` and `onTerminate()` included.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['commandMap'] = new \SensitiveParameterValue($this->commandMap);
+        $properties['attributeUuidCache'] = new \SensitiveParameterValue($this->attributeUuidCache);
+
+        return $properties;
     }
 }

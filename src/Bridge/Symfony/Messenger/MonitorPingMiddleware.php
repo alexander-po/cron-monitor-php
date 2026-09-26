@@ -83,7 +83,7 @@ final class MonitorPingMiddleware implements MiddlewareInterface
     /**
      * @param callable():mixed $callback
      */
-    private function safePing(callable $callback): void
+    private function safePing(#[\SensitiveParameter] callable $callback): void
     {
         try {
             $callback();
@@ -106,5 +106,21 @@ final class MonitorPingMiddleware implements MiddlewareInterface
             $error->getFile(),
             $error->getLine(),
         );
+    }
+
+    /**
+     * `print_r()` and `var_dump()` show the monitor map the way PHP shows a
+     * `#[\SensitiveParameter]` argument: the bus's middleware stack holds this
+     * middleware, and so does every frame that receives the stack, `handle()`
+     * included.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['monitorMap'] = new \SensitiveParameterValue($this->monitorMap);
+
+        return $properties;
     }
 }

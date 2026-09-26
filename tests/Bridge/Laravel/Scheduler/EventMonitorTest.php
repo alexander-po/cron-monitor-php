@@ -7,13 +7,17 @@ namespace CronMonitor\Tests\Bridge\Laravel\Scheduler;
 use CronMonitor\Bridge\Laravel\Scheduler\EventMonitor;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Console\Scheduling\CacheEventMutex;
 use Illuminate\Console\Scheduling\Event;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Contracts\Container\Container as ContainerContract;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -27,6 +31,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class EventMonitorTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     private const UUID = '55555555-5555-4555-8555-555555555555';
 
     public function test_install_returns_the_same_event_for_fluent_chaining(): void
@@ -103,6 +109,28 @@ final class EventMonitorTest extends TestCase
         }
 
         self::assertCount(3, $http->requests);
+    }
+
+    public function test_a_failed_ping_keeps_the_uuid_out_of_the_frames_a_logger_records(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $event = EventMonitor::install($this->buildEvent(), self::clientThatFailsEveryPing($logger), self::UUID);
+        $container = new Container();
+        $container->instance(ContainerContract::class, $container);
+
+        $event->callBeforeCallbacks($container);
+        $event->exitCode = 0;
+        $event->callAfterCallbacks($container);
+
+        self::assertCount(2, $logger->records);
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [EventMonitor::class.'::safe']);
+    }
+
+    public function test_the_event_holding_the_hooks_prints_no_uuid(): void
+    {
+        $event = EventMonitor::install($this->buildEvent(), $this->buildClient(new RecordingHttpClient([])), self::UUID);
+
+        self::assertStringNotContainsString(self::UUID, print_r($event, true));
     }
 
     private function buildEvent(): Event
