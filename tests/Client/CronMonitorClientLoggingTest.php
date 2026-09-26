@@ -90,7 +90,7 @@ final class CronMonitorClientLoggingTest extends TestCase
 
         $result = $client->ping('a', null, null);
 
-        self::assertSame('The monitor identifier is not a valid cron-monitor UUID.', $result->errorMessage);
+        self::assertSame('The monitor identifier is not a valid cron-monitor UUID (check for whitespace, e.g. a trailing newline).', $result->errorMessage);
         self::assertSame($result->errorMessage, $this->recordAt('error', $logger)['context']['error'] ?? null);
     }
 
@@ -122,6 +122,26 @@ final class CronMonitorClientLoggingTest extends TestCase
         self::assertRawUuidAbsent($logger);
         self::assertIsString($result->errorMessage);
         self::assertStringNotContainsStringIgnoringCase(self::UUID, $result->errorMessage);
+    }
+
+    public function test_a_uuid_with_a_trailing_newline_is_rejected_before_a_transport_can_quote_it(): void
+    {
+        // Guzzle's URI percent-encodes the newline.
+        $quoted = $this->transportError(
+            'cURL error 7: Failed to connect for https://cronheart.com/ping/'.self::UUID.'%0A',
+        );
+        $logger = new InMemoryLogger();
+        $http = new RecordingHttpClient([$quoted]);
+        $client = $this->clientWith($http, $logger);
+
+        $result = $client->heartbeat(self::UUID."\n");
+
+        self::assertRawUuidAbsent($logger);
+        self::assertIsString($result->errorMessage);
+        self::assertStringNotContainsStringIgnoringCase(self::UUID, $result->errorMessage);
+        self::assertSame([], $http->requests);
+        self::assertFalse($result->delivered);
+        self::assertSame('cron-monitor ping URL build failed', $this->recordAt('error', $logger)['message']);
     }
 
     public function test_bad_uuid_error_never_carries_the_raw_identifier(): void
