@@ -6,6 +6,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [1.5.0] — 2026-09-26
+
 A minor release: a cronheart.com account and its first API token can now come
 from the terminal. Additive apart from the entries under Changed; the
 existing wire mapping is untouched.
