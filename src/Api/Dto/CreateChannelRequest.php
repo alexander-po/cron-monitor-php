@@ -22,7 +22,9 @@ final class CreateChannelRequest
         public readonly string $label,
         public readonly ?string $address = null,
         public readonly ?string $chatId = null,
+        #[\SensitiveParameter]
         public readonly ?string $webhookUrl = null,
+        #[\SensitiveParameter]
         public readonly ?string $secret = null,
     ) {
         if ('' === trim($label)) {
@@ -57,17 +59,17 @@ final class CreateChannelRequest
         return new self(ChannelKind::Telegram, $label, chatId: $chatId);
     }
 
-    public static function slack(string $label, string $webhookUrl): self
+    public static function slack(string $label, #[\SensitiveParameter] string $webhookUrl): self
     {
         return new self(ChannelKind::Slack, $label, webhookUrl: $webhookUrl);
     }
 
-    public static function discord(string $label, string $webhookUrl): self
+    public static function discord(string $label, #[\SensitiveParameter] string $webhookUrl): self
     {
         return new self(ChannelKind::Discord, $label, webhookUrl: $webhookUrl);
     }
 
-    public static function webhook(string $label, string $webhookUrl, string $secret): self
+    public static function webhook(string $label, #[\SensitiveParameter] string $webhookUrl, #[\SensitiveParameter] string $secret): self
     {
         return new self(ChannelKind::Webhook, $label, webhookUrl: $webhookUrl, secret: $secret);
     }

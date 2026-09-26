@@ -23,7 +23,7 @@ use CronMonitor\Api\Internal\SecretRedactor;
  * the RFC 7807 `application/problem+json` fields when the backend supplied
  * them.
  *
- * `getPrevious()` still returns the original throwable untouched, so callers
+ * `getPrevious()`, when set, returns the original throwable untouched, so callers
  * can branch on its type; it is the *rendered* form that is scrubbed, since
  * that is the copy that gets pasted into issue trackers and chat.
  */

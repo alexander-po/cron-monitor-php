@@ -6,7 +6,27 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet — open a PR and add your entry under the appropriate subsection._
+### Security
+
+- **A failed channel create no longer hands the webhook URL or the signing
+  secret to stack-frame arguments.** With `zend.exception_ignore_args=0`
+  (PHP's development default) an error tracker records every frame's
+  arguments, and a `createChannel()` that failed — a `422`, a transport error,
+  a body that could not be encoded — carried the channel's webhook URL and
+  secret there. A Slack or Discord webhook URL is itself a credential.
+  `createChannel()`'s request, the client's internal request body, and the
+  `webhookUrl` / `secret` parameters of `CreateChannelRequest`'s constructor
+  and of its `slack()`, `discord()` and `webhook()` factories are now
+  `#[\SensitiveParameter]`, so a request the DTO rejects is covered too. The
+  PSR-7 request still reaches the PSR-18 client, whose frames the SDK does not
+  control; the body sits in its stream, not in a string argument.
+
+### Changed
+
+- **A request body that cannot be encoded as JSON no longer chains a
+  `\JsonException`.** The `ApiTransportException` names the encoder's error in
+  its message instead, and its `getPrevious()` is now `null`: the
+  `\JsonException`'s own trace held the whole body, secrets included.
 
 ## [1.5.0] — 2026-09-26
 

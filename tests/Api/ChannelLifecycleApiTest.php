@@ -7,20 +7,32 @@ namespace CronMonitor\Tests\Api;
 use CronMonitor\Api\Dto\Channel;
 use CronMonitor\Api\Dto\CreateChannelRequest;
 use CronMonitor\Api\Exception\ApiException;
+use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Exception\ChannelDeliveryException;
 use CronMonitor\Api\Exception\NotFoundException;
 use CronMonitor\Api\Exception\UnexpectedResponseException;
 use CronMonitor\Api\Exception\ValidationException;
 use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Client\Configuration;
+use CronMonitor\Client\CurlException;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 
 final class ChannelLifecycleApiTest extends TestCase
 {
-    private function client(RecordingHttpClient $http, int $retries = 0): MonitorApiClient
+    use SecretTraceAssertions;
+
+    private const WEBHOOK_TOKEN = 'Xc9Vb2Nm5Qw8Er1Ty4Ui7';
+    private const WEBHOOK_URL = 'https://hooks.example.test/deliver/'.self::WEBHOOK_TOKEN;
+    private const WEBHOOK_SECRET = 'signing-secret-Lp3Ko6Ji9Hu2Gy5Ft8Dr1';
+
+    private function client(ClientInterface $http, int $retries = 0): MonitorApiClient
     {
         $factory = new HttpFactory();
 
@@ -84,6 +96,44 @@ final class ChannelLifecycleApiTest extends TestCase
             self::assertSame(503, $e->statusCode);
         }
         self::assertCount(1, $http->requests, 'channel create must not be retried');
+    }
+
+    public function test_a_rejected_webhook_create_keeps_its_url_and_secret_out_of_trace_arguments(): void
+    {
+        $create = fn () => $this->client(new RecordingHttpClient([self::jsonResponse(422, ['title' => 'Unprocessable Entity', 'detail' => 'The webhook URL was rejected.'])]))
+            ->createChannel(CreateChannelRequest::webhook('Ops webhook', self::WEBHOOK_URL, self::WEBHOOK_SECRET));
+
+        $this->assertSecretStaysOutOfTraces(self::WEBHOOK_TOKEN, $create, ValidationException::class);
+        $this->assertSecretStaysOutOfTraces(self::WEBHOOK_SECRET, $create, ValidationException::class);
+    }
+
+    public function test_a_create_that_fails_in_transport_keeps_the_webhook_url_and_secret_out_of_trace_arguments(): void
+    {
+        $http = new class implements ClientInterface {
+            public function sendRequest(RequestInterface $request): ResponseInterface
+            {
+                throw new CurlException('Could not resolve host', $request);
+            }
+        };
+        $create = fn () => $this->client($http)->createChannel(CreateChannelRequest::webhook('Ops webhook', self::WEBHOOK_URL, self::WEBHOOK_SECRET));
+
+        $this->assertSecretStaysOutOfTraces(self::WEBHOOK_TOKEN, $create, ApiTransportException::class);
+        $e = $this->assertSecretStaysOutOfTraces(self::WEBHOOK_SECRET, $create, ApiTransportException::class);
+
+        self::assertInstanceOf(CurlException::class, $e->getPrevious());
+    }
+
+    public function test_a_create_body_that_cannot_be_encoded_names_the_error_and_keeps_the_secret_out_of_traces(): void
+    {
+        $http = new RecordingHttpClient([]);
+        $create = fn () => $this->client($http)->createChannel(CreateChannelRequest::webhook("Ops\xB1webhook", self::WEBHOOK_URL, self::WEBHOOK_SECRET));
+
+        $this->assertSecretStaysOutOfTraces(self::WEBHOOK_TOKEN, $create, ApiTransportException::class);
+        $e = $this->assertSecretStaysOutOfTraces(self::WEBHOOK_SECRET, $create, ApiTransportException::class);
+
+        self::assertStringContainsString('Malformed UTF-8', $e->getMessage());
+        self::assertNull($e->getPrevious());
+        self::assertSame([], $http->requests);
     }
 
     public function test_get_channel_parses_object(): void

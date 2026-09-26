@@ -15,12 +15,15 @@ use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CurlException;
 use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 final class SignupApiTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     private const DEVICE_CODE = 'dc_secret_value_4Qm9xT2vLr8Kp1Zs';
 
     private function client(RecordingHttpClient $http, ?Configuration $configuration = null): MonitorApiClient
@@ -337,14 +340,15 @@ final class SignupApiTest extends TestCase
         $token = 'cmk_Zq8Wv3Tn6Yb1Xc4Ld7Mf0Ks2';
         $http = new RecordingHttpClient([self::json(200, ['token' => $token, 'project' => ['not' => 'a string']])]);
 
-        $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE));
+        $e = $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE), ApiTransportException::class);
+        self::assertInstanceOf(\UnexpectedValueException::class, $e->getPrevious());
     }
 
     public function test_an_unreadable_start_keeps_the_device_code_out_of_trace_arguments(): void
     {
         $http = new RecordingHttpClient([self::json(202, ['device_code' => self::DEVICE_CODE, 'user_code' => 42])]);
 
-        $this->assertSecretStaysOutOfTraces(self::DEVICE_CODE, fn () => $this->client($http)->startSignup('you@example.com', acceptTerms: true));
+        $this->assertSecretStaysOutOfTraces(self::DEVICE_CODE, fn () => $this->client($http)->startSignup('you@example.com', acceptTerms: true), ApiTransportException::class);
     }
 
     public function test_a_confirmation_that_is_not_json_keeps_the_token_out_of_trace_arguments(): void
@@ -352,7 +356,7 @@ final class SignupApiTest extends TestCase
         $token = 'cmk_Rt5Yu8Io1Pa4Sd7Fg0Hj3Kl6';
         $http = new RecordingHttpClient([new Response(200, ['Content-Type' => 'application/json'], '{"token":"'.$token.'"}<br /><b>Notice</b>')]);
 
-        $e = $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE));
+        $e = $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE), ApiTransportException::class);
         self::assertSame(200, $e->statusCode);
     }
 
@@ -361,7 +365,7 @@ final class SignupApiTest extends TestCase
         $token = 'cmk_Wq2Er5Ty8Ui1Op4As7Df0Gh3';
         $http = new RecordingHttpClient([self::json(200, ['token' => ['value' => $token]])]);
 
-        $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE));
+        $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE), ApiTransportException::class);
     }
 
     public function test_an_unreadable_rotated_secret_stays_out_of_trace_arguments(): void
@@ -377,7 +381,7 @@ final class SignupApiTest extends TestCase
             'secret' => $secret,
         ])]);
 
-        $this->assertSecretStaysOutOfTraces($secret, fn () => $this->client($http)->rotateChannelSecret('7'));
+        $this->assertSecretStaysOutOfTraces($secret, fn () => $this->client($http)->rotateChannelSecret('7'), ApiTransportException::class);
     }
 
     public function test_a_failed_poll_logs_the_route_and_not_the_device_code(): void
@@ -395,45 +399,5 @@ final class SignupApiTest extends TestCase
 
         self::assertSame('/api/v1/signup/token', $logger->records[0]['context']['route'] ?? null);
         self::assertStringNotContainsString(self::DEVICE_CODE, json_encode($logger->records, \JSON_THROW_ON_ERROR));
-    }
-
-    /**
-     * @param \Closure(): mixed $call
-     */
-    private function assertSecretStaysOutOfTraces(#[\SensitiveParameter] string $secret, \Closure $call): ApiTransportException
-    {
-        $previous = ini_set('zend.exception_ignore_args', '0');
-        try {
-            $call();
-            self::fail('Expected an ApiTransportException.');
-        } catch (ApiTransportException $e) {
-            for ($link = $e; null !== $link; $link = $link->getPrevious()) {
-                self::assertStringNotContainsString($secret, self::argumentsBelowTheTest($link));
-            }
-            self::assertStringNotContainsString(substr($secret, 0, 12), (string) $e);
-
-            return $e;
-        } finally {
-            ini_set('zend.exception_ignore_args', false === $previous ? '1' : $previous);
-        }
-    }
-
-    /**
-     * The arguments of every frame between the throw and the test, built-in
-     * functions included. The test's own frames and PHPUnit's hold the
-     * fixtures, so the walk stops there.
-     */
-    private static function argumentsBelowTheTest(\Throwable $e): string
-    {
-        $arguments = [];
-        foreach ($e->getTrace() as $frame) {
-            if (1 === preg_match('/^(CronMonitor\\\\Tests|PHPUnit)\\\\/', (string) ($frame['class'] ?? ''))) {
-                break;
-            }
-            $arguments[] = $frame['args'] ?? [];
-        }
-        self::assertNotSame([], $arguments, 'no frame below the test, so the check would be vacuous');
-
-        return print_r($arguments, true);
     }
 }

@@ -6,10 +6,16 @@ namespace CronMonitor\Tests\Api\Dto;
 
 use CronMonitor\Api\Dto\ChannelKind;
 use CronMonitor\Api\Dto\CreateChannelRequest;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class CreateChannelRequestTest extends TestCase
 {
+    use SecretTraceAssertions;
+
+    private const WEBHOOK_URL = 'https://hooks.example.test/deliver/Hj2Kl5Zx8Cv1Bn4Mq7We0';
+    private const SECRET = 'signing-secret-Rt6Yu9Io2Pa5Sd8Fg1Hj4';
+
     public function test_email_named_constructor(): void
     {
         $req = CreateChannelRequest::email('My inbox', 'me@example.test');
@@ -78,5 +84,21 @@ final class CreateChannelRequestTest extends TestCase
     {
         $this->expectException(\InvalidArgumentException::class);
         new CreateChannelRequest(ChannelKind::Email, 'X', address: 'me@example.test', secret: 'nope');
+    }
+
+    public function test_a_rejected_request_keeps_the_webhook_url_and_secret_out_of_trace_arguments(): void
+    {
+        $rejected = [
+            [static fn () => CreateChannelRequest::slack(' ', self::WEBHOOK_URL), [self::WEBHOOK_URL]],
+            [static fn () => CreateChannelRequest::discord(' ', self::WEBHOOK_URL), [self::WEBHOOK_URL]],
+            [static fn () => CreateChannelRequest::webhook(' ', self::WEBHOOK_URL, self::SECRET), [self::WEBHOOK_URL, self::SECRET]],
+            [static fn () => new CreateChannelRequest(ChannelKind::Slack, 'S', webhookUrl: self::WEBHOOK_URL, secret: self::SECRET), [self::WEBHOOK_URL, self::SECRET]],
+        ];
+
+        foreach ($rejected as [$build, $secrets]) {
+            foreach ($secrets as $secret) {
+                $this->assertSecretStaysOutOfTraces($secret, $build, \InvalidArgumentException::class);
+            }
+        }
     }
 }
