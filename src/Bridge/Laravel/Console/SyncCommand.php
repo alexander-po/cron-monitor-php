@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Bridge\Laravel\Console;
 
+use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Client\Configuration;
@@ -112,7 +113,7 @@ final class SyncCommand extends Command
         $channelId = null;
         $rawChannel = $this->option('channel');
         if (null !== $rawChannel) {
-            if (!\is_string($rawChannel) || 1 !== preg_match('/^[1-9]\d*$/', $rawChannel)) {
+            if (!\is_string($rawChannel) || !CreateMonitorRequest::isPositiveChannelId($rawChannel)) {
                 $this->error('--channel must be a positive integer channel id.');
 
                 return self::INVALID;

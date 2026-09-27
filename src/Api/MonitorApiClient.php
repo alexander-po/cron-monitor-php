@@ -687,8 +687,8 @@ final class MonitorApiClient
      */
     private function assertChannelId(string $id): void
     {
-        if (1 !== preg_match('/^[1-9]\d*$/', $id)) {
-            throw new \InvalidArgumentException(\sprintf('%s is not a valid channel id (expected a positive integer).', var_export($id, true)));
+        if (str_ends_with($id, "\n") || !CreateMonitorRequest::isPositiveChannelId($id)) {
+            throw new \InvalidArgumentException('The channel id is not valid (expected a positive integer, digits only).');
         }
     }
 

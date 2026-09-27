@@ -20,9 +20,11 @@ final class Configuration
     public const DEFAULT_ENDPOINT = 'https://cronheart.com';
 
     /**
-     * Canonical UUID v4 shape, unanchored so it serves both the whole-string
-     * check in {@see pingUrl()} and the substring sweep the ping client runs
-     * over text a transport quoted back.
+     * Canonical 8-4-4-4-12 hex, any version, matched case-insensitively.
+     * Unanchored, so each caller anchors it: {@see pingUrl()} with `D`, which
+     * rejects a trailing newline as well, and the ping client's scrub without
+     * it, as the guard that decides whether an identifier is replaced in text
+     * a transport quoted back.
      */
     public const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
@@ -130,12 +132,12 @@ final class Configuration
             return $base;
         }
 
-        // Mirror the server's own route requirement for the action segment
-        // (`[a-zA-Z0-9_-]{1,16}`). A client-side reject is friendlier than a
-        // server 404 and also defends against accidental path-injection if a
-        // future caller ever read the action segment from user input.
-        if (1 !== preg_match('/^[a-z0-9_-]{1,16}$/i', $action)) {
-            throw new \InvalidArgumentException(\sprintf('%s is not a valid ping action.', $action));
+        // The service stores a ping only for these segments and answers every
+        // other one with a 404, so a local reject turns a silent miss into a
+        // logged error. The rejected value is not echoed, for the same reason
+        // as the identifier above: it can be a UUID or token passed by mistake.
+        if (1 !== preg_match('/^(?:run|start|success|ok|fail|[0-9]{1,16})$/iD', $action)) {
+            throw new \InvalidArgumentException('The ping action is not valid (expected run, start, success, ok or fail, case-insensitive, or 1 to 16 digits such as an exit code).');
         }
 
         return $base.'/'.$action;

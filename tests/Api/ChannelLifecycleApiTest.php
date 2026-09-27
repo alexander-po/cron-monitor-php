@@ -19,6 +19,7 @@ use CronMonitor\Tests\Support\RecordingHttpClient;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
@@ -171,6 +172,44 @@ final class ChannelLifecycleApiTest extends TestCase
         } finally {
             self::assertSame([], $http->requests);
         }
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(MonitorApiClient, string): void}>
+     */
+    public static function channelCalls(): iterable
+    {
+        yield 'get' => [static function (MonitorApiClient $client, string $id): void { $client->getChannel($id); }];
+        yield 'update' => [static function (MonitorApiClient $client, string $id): void { $client->updateChannel($id, 'Ops webhook'); }];
+        yield 'delete' => [static function (MonitorApiClient $client, string $id): void { $client->deleteChannel($id); }];
+        yield 'rotate secret' => [static function (MonitorApiClient $client, string $id): void { $client->rotateChannelSecret($id); }];
+        yield 'test' => [static function (MonitorApiClient $client, string $id): void { $client->testChannel($id); }];
+    }
+
+    /**
+     * @param \Closure(MonitorApiClient, string): void $call
+     */
+    #[DataProvider('channelCalls')]
+    public function test_a_channel_id_with_a_trailing_newline_is_rejected_without_http(\Closure $call): void
+    {
+        $http = new RecordingHttpClient([self::jsonResponse(404, ['title' => 'Not Found'])]);
+        $client = $this->client($http);
+
+        $this->expectException(\InvalidArgumentException::class);
+        try {
+            $call($client, "7\n");
+        } finally {
+            self::assertSame([], $http->requests);
+        }
+    }
+
+    public function test_a_rejected_channel_id_is_not_echoed(): void
+    {
+        $client = $this->client(new RecordingHttpClient([]));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/^The channel id is not valid \(expected a positive integer, digits only\)\.$/D');
+        $client->deleteChannel('00000000-0000-4000-a000-000000000000');
     }
 
     public function test_update_channel_sends_label(): void

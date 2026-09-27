@@ -123,7 +123,7 @@ not a file path:
 | Item                  | SDK location                                | Backend anchor                                            |
 |-----------------------|---------------------------------------------|-----------------------------------------------------------|
 | `BODY_CAP_BYTES`      | `src/Client/CronMonitorClient.php` (10 000) | backend `Ping` entity body-excerpt cap (10 000)           |
-| Action segment regex  | `src/Client/Configuration.php` (`{1,16}`)   | backend ping route (`{1,16}`)                             |
+| Action set            | `src/Client/Configuration.php` (`run/start/success/ok/fail`, case-insensitive, or 1–16 digits) | backend ping action route (the same fixed set; other segments 404 and store no ping) |
 | UUID validation       | `src/Client/Configuration.php` (canonical) | backend ping route (`{36}` hex)                           |
 | Default endpoint      | `src/Client/Configuration.php`              | production host (`cronheart.com`)                         |
 | Snooze durations      | `src/Api/Dto/SnoozeDuration.php` (`1h/4h/1d/1w`) | backend `SnoozeDuration` enum                        |

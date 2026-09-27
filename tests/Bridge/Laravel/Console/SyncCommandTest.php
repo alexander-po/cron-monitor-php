@@ -200,6 +200,17 @@ final class SyncCommandTest extends TestCase
         self::assertSame([], $http->requests);
     }
 
+    public function test_a_channel_with_a_trailing_newline_reaches_the_create_as_given(): void
+    {
+        $http = new RecordingHttpClient([self::listPage(), self::createdMonitor('00000000-0000-4000-a000-000000000000')]);
+        $tester = $this->tester($http, $this->scheduleWith('reports:run'));
+
+        $exit = $tester->execute(['--apply' => true, '--channel' => "7\n"]);
+
+        self::assertSame(0, $exit);
+        self::assertSame(["7\n"], json_decode($http->bodies[1], true)['channel_ids'] ?? null);
+    }
+
     public function test_apply_threads_the_event_timezone_into_the_created_monitor(): void
     {
         $uuid = '33333333-3333-4333-8333-333333333333';

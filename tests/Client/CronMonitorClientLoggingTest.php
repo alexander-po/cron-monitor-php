@@ -208,6 +208,29 @@ final class CronMonitorClientLoggingTest extends TestCase
         self::assertSame('cron-monitor ping URL build failed', $this->recordAt('error', $logger)['message']);
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function misplacedCredentials(): iterable
+    {
+        yield 'arguments swapped' => ['start', self::UUID];
+        yield 'a uuid as the action' => ['00000000-0000-4000-a000-000000000000', self::UUID];
+        yield 'a token as the action' => ['00000000-0000-4000-a000-000000000000', 'cmk_example_notarealtoken'];
+    }
+
+    #[DataProvider('misplacedCredentials')]
+    public function test_a_credential_passed_as_the_action_reaches_neither_the_log_nor_the_result(string $monitorUuid, string $action): void
+    {
+        $logger = new InMemoryLogger();
+        $client = $this->clientWith(new RecordingHttpClient([]), $logger);
+
+        $result = $client->ping($monitorUuid, $action, null);
+
+        self::assertArrayNotHasKey('action', $this->recordAt('error', $logger)['context']);
+        self::assertStringNotContainsStringIgnoringCase($action, json_encode($logger->records, \JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsStringIgnoringCase($action, (string) $result->errorMessage);
+    }
+
     public function test_bad_uuid_error_never_carries_the_raw_identifier(): void
     {
         $logger = new InMemoryLogger();

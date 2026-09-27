@@ -83,6 +83,35 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   whose logger holds the application, whatever holds the ping client:
   `EventMonitor::safe()`, a scheduled `Event` and the frames that call its
   hooks.
+- **A monitor UUID or an API token passed as a ping action or a channel id no
+  longer reaches a log record or an exception message.** With the arguments
+  swapped, `ping('start', $uuid, null)` wrote the UUID into the `action`
+  context of its URL-build error; `ping($uuid, $otherUuid, null)` put the other
+  UUID into that context, the `error` context and `PingResult::$errorMessage`;
+  and `deleteChannel($uuid)` quoted it in its `\InvalidArgumentException`.
+  Neither rejection quotes the value any more, and the URL-build error no
+  longer carries an `action` key, since the action there is either unchecked
+  or the rejected value. The messages now read "The ping action is not valid
+  (expected run, start, success, ok or fail, case-insensitive, or 1 to 16
+  digits such as an exit code)." and "The channel id is not valid (expected a
+  positive integer, digits only).". Still exposed: `pingUrl()`'s `$action`,
+  the channel methods' `$id` and the requests' `$channelIds` are not
+  `#[\SensitiveParameter]`, so with `zend.exception_ignore_args=0` such a
+  value stays in the thrown exception's frame arguments.
+
+### Fixed
+
+- **A ping action or a channel id in a request path with a trailing newline
+  is rejected before any request.** As with the monitor UUID above, a regex
+  `$` let `"start\n"` through `Configuration::pingUrl()`'s action check and
+  `"7\n"` through the channel-id check of `MonitorApiClient`'s channel
+  methods. In the path the service answered `404`: the ping failed without a
+  log line, and a channel call threw a `NotFoundException`. Both are now
+  refused locally, the ping as a logged URL-build error and the channel call
+  as an `\InvalidArgumentException`. A channel id in a request body is
+  unchanged: the `channelIds` of `CreateMonitorRequest` and
+  `UpdateMonitorRequest` and the `--channel` option of both `cron-monitor:sync`
+  commands still accept `"7\n"`, which the service reads as channel 7.
 
 ### Changed
 
@@ -98,6 +127,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `PingResult::$errorMessage` and `error` log context carry it too: a value
   that fails the check, such as a UUID with a stray space, can still hold the
   real one.
+- **`Configuration::pingUrl()` accepts only the action segments the service
+  stores a ping for:** `run`, `start`, `success`, `ok` or `fail`
+  (case-insensitive), or 1 to 16 digits such as an exit code. It used to accept
+  any `[a-zA-Z0-9_-]{1,16}`, but the service answers every other segment with
+  `404` and stores nothing, so such a ping was already lost.
+  `CronMonitorClient::ping()` with one now logs its URL-build error at `error`
+  level and returns a failed result with no status and no attempt, where it
+  used to return the `404` without a log line. `heartbeat()`, `start()`,
+  `success()` and `fail()` are unaffected.
 
 ## [1.5.0] — 2026-09-26
 

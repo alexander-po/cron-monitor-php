@@ -182,4 +182,16 @@ final class SyncCommandTest extends TestCase
         self::assertStringContainsString('--channel', $tester->getDisplay());
         self::assertSame([], $http->requests);
     }
+
+    public function test_a_channel_with_a_trailing_newline_reaches_the_create_as_given(): void
+    {
+        $http = new RecordingHttpClient([self::listPage(), self::createdMonitor('00000000-0000-4000-a000-000000000000')]);
+        $command = new SyncCommand($this->inventory(), $this->apiClient($http), new Configuration('https://cronheart.com', apiKey: 'cmk_test'));
+
+        $tester = new CommandTester($command);
+        $exit = $tester->execute(['--apply' => true, '--channel' => "7\n"]);
+
+        self::assertSame(0, $exit);
+        self::assertSame(["7\n"], json_decode($http->bodies[1], true)['channel_ids'] ?? null);
+    }
 }

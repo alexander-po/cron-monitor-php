@@ -20,10 +20,10 @@ namespace CronMonitor\Api\Internal;
 final class SecretRedactor
 {
     /**
-     * Canonical UUID v4 shape. Intentionally a private copy of the literal in
-     * {@see \CronMonitor\Client\Configuration::pingUrl()} rather than a shared
-     * constant, keeping the API layer from reaching into the ping client's
-     * configuration. If the canonical pattern ever changes, change both.
+     * Canonical 8-4-4-4-12 hex, any version: a copy of
+     * {@see \CronMonitor\Client\Configuration::UUID_PATTERN}, which
+     * {@see redact()} sweeps unanchored over quoted text. If the canonical
+     * pattern ever changes, change both.
      */
     public const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 

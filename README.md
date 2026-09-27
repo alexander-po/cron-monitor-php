@@ -622,9 +622,12 @@ zone, set the monitor's timezone on the dashboard after creating it.
   SHA-256 of the monitor UUID (the same digest the server logs, so the two
   join during an incident), and the management client reports the route it
   called — `/api/v1/monitors/{uuid}` — rather than the resolved path.
-- The per-monitor UUID is treated as a write credential and is validated
-  against the canonical UUID v4 shape before being concatenated into a
-  URL — no path traversal via the action segment.
+- The per-monitor UUID is treated as a write credential and must be a
+  canonical UUID, nothing around it, before it is concatenated into a URL.
+  The action segment must be one of `run`, `start`, `success`, `ok`, `fail`
+  (case-insensitive) or 1 to 16 digits such as an exit code, the segments
+  the service stores a ping for, so no path traversal and not even a
+  trailing newline reaches the path. A rejected value is not echoed.
 - The `Authorization: Bearer <api_key>` header is attached only when an
   API key is configured; nothing is sent for anonymous installs.
 - **The API token (`api_key`) is a full account credential**, far more

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Bridge\Symfony\Console;
 
+use CronMonitor\Api\Dto\CreateMonitorRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Bridge\Symfony\Scheduler\ScheduledJob;
@@ -118,7 +119,7 @@ final class SyncCommand extends Command
 
         $channelId = null;
         if (null !== $channelOption) {
-            if (!\is_string($channelOption) || 1 !== preg_match('/^[1-9]\d*$/', $channelOption)) {
+            if (!\is_string($channelOption) || !CreateMonitorRequest::isPositiveChannelId($channelOption)) {
                 $io->error('--channel must be a positive integer channel id.');
 
                 return Command::INVALID;
