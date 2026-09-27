@@ -51,6 +51,7 @@ final class MonitorQueueJob
 {
     public function __construct(
         private readonly ?CronMonitorClient $client,
+        #[\SensitiveParameter]
         private readonly string $monitorUuid,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
@@ -86,7 +87,7 @@ final class MonitorQueueJob
      * `UnhandledMatchError`) — all of which must equally not break
      * the host job.
      */
-    public static function withUuid(string $monitorUuid): self
+    public static function withUuid(#[\SensitiveParameter] string $monitorUuid): self
     {
         try {
             /** @var CronMonitorClient $client */

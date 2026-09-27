@@ -9,10 +9,8 @@ use CronMonitor\Tests\Fixtures\Laravel\EmptyMonitorScheduledCommand;
 use CronMonitor\Tests\Fixtures\Laravel\EnvMonitoredScheduledCommand;
 use CronMonitor\Tests\Fixtures\Laravel\MonitoredScheduledCommand;
 use CronMonitor\Tests\Fixtures\Laravel\PlainScheduledCommand;
-use Illuminate\Console\Scheduling\CacheEventMutex;
+use CronMonitor\Tests\Support\UnusedEventMutex;
 use Illuminate\Console\Scheduling\Event;
-use Illuminate\Contracts\Cache\Factory as CacheFactory;
-use Illuminate\Contracts\Cache\Repository;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command as SymfonyCommand;
 
@@ -219,14 +217,7 @@ final class AttributeResolverTest extends TestCase
 
     private function buildEvent(string $command): Event
     {
-        $mutex = new CacheEventMutex(new class implements CacheFactory {
-            public function store($name = null): Repository
-            {
-                throw new \LogicException('cache should not be touched in these tests');
-            }
-        });
-
-        return new Event($mutex, $command, null);
+        return new Event(new UnusedEventMutex(), $command, null);
     }
 
     /**

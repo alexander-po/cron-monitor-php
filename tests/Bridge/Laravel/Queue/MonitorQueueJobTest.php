@@ -70,6 +70,44 @@ final class MonitorQueueJobTest extends TestCase
         self::assertSame('still ran', $result);
     }
 
+    public function test_with_uuid_falls_back_to_noop_when_the_container_raises_an_error(): void
+    {
+        $container = new Container();
+        $container->singleton(CronMonitorClient::class, static function (): never {
+            throw new \TypeError('a host binding of the wrong type');
+        });
+        Container::setInstance($container);
+
+        $result = MonitorQueueJob::withUuid(self::UUID)->handle(new \stdClass(), static fn () => 'still ran');
+
+        self::assertSame('still ran', $result);
+    }
+
+    public function test_resolving_the_client_keeps_the_uuid_out_of_the_frames_a_logger_records(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $client = $this->buildClient(new RecordingHttpClient([]));
+        $container = new Container();
+        $container->singleton(CronMonitorClient::class, static function () use ($logger, $client): CronMonitorClient {
+            $logger->warning('the host logs while its transport is built');
+
+            return $client;
+        });
+        Container::setInstance($container);
+
+        MonitorQueueJob::withUuid(self::UUID);
+
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [MonitorQueueJob::class.'::withUuid']);
+    }
+
+    public function test_a_mis_wired_constructor_keeps_the_uuid_out_of_trace_arguments(): void
+    {
+        $client = $this->buildClient(new RecordingHttpClient([]));
+        $notALogger = self::misWiredDependency();
+
+        $this->assertSecretStaysOutOfTraces(self::UUID, static fn () => new MonitorQueueJob($client, self::UUID, $notALogger), \TypeError::class);
+    }
+
     public function test_returning_handler_emits_start_then_success(): void
     {
         $http = new RecordingHttpClient([new Response(200), new Response(200)]);
@@ -185,5 +223,10 @@ final class MonitorQueueJobTest extends TestCase
             $factory,
             $factory,
         );
+    }
+
+    private static function misWiredDependency(): mixed
+    {
+        return 'a string where an object belongs';
     }
 }

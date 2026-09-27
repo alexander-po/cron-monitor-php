@@ -6,7 +6,41 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet — open a PR and add your entry under the appropriate subsection._
+### Security
+
+- **Setting up the Laravel queue middleware, `EventMonitor::install()` and
+  the scheduler macro's `#[Monitor]` fallback no longer hand the monitor UUID
+  to frame arguments.** `MonitorQueueJob::withUuid()` is on the stack while
+  the container builds the ping client, and the host's PSR-18 client and
+  logger with it, and so is the `monitor()` macro, which holds the UUID it
+  read from the attribute when it was handed `null` (an unset
+  `env('MY_UUID')`, for instance). A handler that records a backtrace there
+  read the UUID from their arguments, as did the trace of an exception thrown
+  through `MonitorQueueJob`'s constructor (a mis-wired logger) or through
+  `install()` (an `Event` subclass whose hook registration throws). The
+  `$monitorUuid` of `withUuid()`, of `MonitorQueueJob`'s constructor, of
+  `install()` and of the macro is now `#[\SensitiveParameter]`. Still
+  exposed: a UUID passed to `->monitor('uuid')` stays in the frame of
+  Laravel's `Macroable::__call()` for the whole macro call (a
+  `#[Monitor(env: ...)]` attribute with a bare `->monitor()` keeps it out),
+  and these frames still receive the ping client, which reaches the host's
+  configuration as the 1.5.1 entry on a failed ping describes.
+
+### Fixed
+
+- **`->monitor('uuid')` no longer throws when the ping client cannot be
+  built.** A configuration the client rejects (an `http://` endpoint without
+  `allow_insecure_endpoint`, a zero timeout, an API key with a trailing
+  newline, a `CRON_MONITOR_API_KEY=true` that `env()` reads as a boolean)
+  threw out of the macro while the schedule was being defined, so
+  `schedule:run` failed and no task in that run started, monitored or not;
+  with the schedule in `routes/console.php`, which Laravel 11 loads for every
+  Artisan command, every command failed. The exception's trace carried the
+  UUID. The macro now returns the event unmonitored, as
+  `MonitorQueueJob::withUuid()` already did; an `Event` subclass whose hook
+  registration throws is returned with the hooks it accepted. The monitor
+  then misses its pings and the service alerts on them;
+  `artisan cron-monitor:sync` still reports the configuration error.
 
 ## [1.5.1] — 2026-09-27
 

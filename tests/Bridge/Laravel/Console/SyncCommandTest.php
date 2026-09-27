@@ -8,11 +8,11 @@ use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Bridge\Laravel\Console\SyncCommand;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\UnusedEventMutex;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
-use Illuminate\Console\Scheduling\EventMutex;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Container\Container;
 use PHPUnit\Framework\TestCase;
@@ -54,43 +54,24 @@ final class SyncCommandTest extends TestCase
 
     private function scheduleWith(string $command, string $expression = '0 * * * *'): Schedule
     {
-        $event = (new Event($this->noopMutex(), $command))->cron($expression);
+        $event = (new Event(new UnusedEventMutex(), $command))->cron($expression);
 
         return $this->scheduleOf($event);
     }
 
     private function scheduleInTimezone(string $command, string $tz): Schedule
     {
-        $event = (new Event($this->noopMutex(), $command))->cron('0 9 * * *')->timezone($tz);
+        $event = (new Event(new UnusedEventMutex(), $command))->cron('0 9 * * *')->timezone($tz);
 
         return $this->scheduleOf($event);
     }
 
     private function scheduleWithClosure(): Schedule
     {
-        $mutex = $this->noopMutex();
+        $mutex = new UnusedEventMutex();
         $event = (new CallbackEvent($mutex, static fn (): null => null))->cron('0 * * * *');
 
         return $this->scheduleOf($event);
-    }
-
-    private function noopMutex(): EventMutex
-    {
-        return new class implements EventMutex {
-            public function create(Event $event): bool
-            {
-                return true;
-            }
-
-            public function exists(Event $event): bool
-            {
-                return false;
-            }
-
-            public function forget(Event $event): void
-            {
-            }
-        };
     }
 
     private function scheduleOf(Event $event): Schedule
