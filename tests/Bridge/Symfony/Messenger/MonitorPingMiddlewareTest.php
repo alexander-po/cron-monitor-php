@@ -7,17 +7,47 @@ namespace CronMonitor\Tests\Bridge\Symfony\Messenger;
 use CronMonitor\Bridge\Symfony\Messenger\MonitorPingMiddleware;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Messenger\Envelope;
+use Symfony\Component\Messenger\Handler\HandlersLocator;
+use Symfony\Component\Messenger\MessageBus;
+use Symfony\Component\Messenger\Middleware\HandleMessageMiddleware;
 use Symfony\Component\Messenger\Middleware\StackInterface;
 use Symfony\Component\Messenger\Stamp\ReceivedStamp;
 
 final class MonitorPingMiddlewareTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     private const UUID = '22222222-2222-4222-8222-222222222222';
+
+    public function test_a_failed_ping_keeps_the_uuid_out_of_the_frames_a_logger_records(): void
+    {
+        $logger = new BacktraceRecordingLogger();
+        $handled = false;
+        $bus = new MessageBus([
+            new MonitorPingMiddleware(self::clientThatFailsEveryPing($logger), [\stdClass::class => self::UUID]),
+            new HandleMessageMiddleware(new HandlersLocator([
+                \stdClass::class => [static function () use (&$handled): void {
+                    $handled = true;
+                }],
+            ])),
+        ]);
+
+        $bus->dispatch(new Envelope(new \stdClass(), [new ReceivedStamp('async')]));
+
+        self::assertTrue($handled);
+        self::assertCount(2, $logger->records);
+        self::assertSecretStaysOutOfLoggedFrames(self::UUID, $logger, [
+            MonitorPingMiddleware::class.'->handle',
+            MonitorPingMiddleware::class.'->safePing',
+        ]);
+    }
 
     public function test_skips_pinging_when_envelope_has_no_received_stamp(): void
     {

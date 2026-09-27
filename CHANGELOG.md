@@ -39,9 +39,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   PSR-18 client other than the bundled `CurlPsr18Client`, the Symfony
   bundle's default `Psr18Client` among them, keeps the request, header
   included, in its own exception's frames and properties, and
-  `ApiTransportException::getPrevious()` chains that exception unchanged; and
-  `CronMonitorClient`'s own `$monitorUuid` parameters are not marked, so a
-  logger that records a backtrace sees them. With
+  `ApiTransportException::getPrevious()` chains that exception unchanged. With
   `zend.exception_ignore_args=1`, which `php.ini-production` sets (PHP's
   built-in default and the official Docker images leave it at `0`), exception
   traces carry no arguments; `debug_backtrace()` still does.
@@ -60,6 +58,31 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   of a `NotFoundException`; the ping client, where the `404` failed silently,
   now logs its URL-build error at `error` level and returns a failed result
   without sending anything.
+- **A failed ping no longer hands the monitor UUID to the SDK's own frame
+  arguments, and `print_r()` of a bridge no longer shows it.**
+  `CronMonitorClient` never throws, but it logs a failed ping, and a PSR-3
+  handler that attaches a backtrace to the record, as error trackers do,
+  reads `debug_backtrace()`, which keeps frame arguments whatever
+  `zend.exception_ignore_args` says. The `$monitorUuid` of `heartbeat()`,
+  `start()`, `success()`, `fail()`, `ping()` and the client's internal
+  dispatch is now `#[\SensitiveParameter]`, and so is the callback the
+  Messenger middleware, the console subscriber and the queue middleware wrap
+  their pings in. `print_r()` and `var_dump()` show the Messenger
+  middleware's monitor map, the console subscriber's command map and cached
+  attribute UUIDs, and the queue middleware's UUID as a
+  `SensitiveParameterValue`, and the Laravel scheduler hooks capture the UUID
+  as one. The bus's middleware stack, a console event (through its command,
+  application and dispatcher), Laravel's pipeline and a scheduled `Event`
+  hold these objects, so every frame that received one used to print the
+  UUID. `var_export()` and Symfony's VarDumper still read the bridges'
+  properties. Still exposed: what the host keeps itself, such as the
+  `%env()%` values Symfony's container has resolved (a monitor UUID, the API
+  token) or Laravel's config repository (the token and the `monitors` map),
+  reaches every frame whose arguments lead to the container. That includes
+  the bridges' `handle()`, `onCommand()` and `onTerminate()`, and in Laravel,
+  whose logger holds the application, whatever holds the ping client:
+  `EventMonitor::safe()`, a scheduled `Event` and the frames that call its
+  hooks.
 
 ### Changed
 
