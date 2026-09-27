@@ -6,6 +6,17 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [1.5.1] — 2026-09-27
+
+A security patch: a failed call, ping or channel create no longer leaves the
+API token, a monitor UUID or a webhook credential in stack-frame arguments or
+log records, and a UUID, ping action or path channel id with a trailing
+newline is refused before any request. The entries under Changed alter only
+input the service already rejected and the exception chain of a body that
+could not be encoded; the wire mapping is untouched.
+
 ### Security
 
 - **A failed channel create no longer hands the webhook URL or the signing
