@@ -133,7 +133,7 @@ final class CronMonitorServiceProvider extends ServiceProvider
         // string is treated as explicit suppression so per-environment
         // overrides (`->monitor(env('MY_UUID', ''))`) work without
         // throwing.
-        Event::macro('monitor', function (?string $monitorUuid = null): Event {
+        Event::macro('monitor', function (#[\SensitiveParameter] ?string $monitorUuid = null): Event {
             /** @var Event $this */
             if (null === $monitorUuid) {
                 $monitorUuid = AttributeResolver::resolveUuid(
@@ -150,9 +150,17 @@ final class CronMonitorServiceProvider extends ServiceProvider
                 return $this;
             }
 
-            $client = app(CronMonitorClient::class);
+            try {
+                $client = app(CronMonitorClient::class);
 
-            return EventMonitor::install($this, $client, $monitorUuid);
+                return EventMonitor::install($this, $client, $monitorUuid);
+            } catch (\Throwable) {
+                // The macro runs while the schedule is being defined, so a
+                // throw here would stop every task in the run, not only this
+                // one. An unmonitored event misses its pings, and the service
+                // alerts on those.
+                return $this;
+            }
         });
     }
 

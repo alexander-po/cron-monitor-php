@@ -12,9 +12,9 @@ use Illuminate\Console\Scheduling\Event;
  * scheduler `Event`.
  *
  * Why this exists as a separate class:
- *  - keeps the macro body in {@see \CronMonitor\Bridge\Laravel\CronMonitorServiceProvider}
- *    a single line, which is what makes the `->monitor('uuid')` ergonomics
- *    feel native to Laravel users;
+ *  - keeps the hooks out of the `monitor()` macro in
+ *    {@see \CronMonitor\Bridge\Laravel\CronMonitorServiceProvider}, which
+ *    only finds the UUID and the client;
  *  - the `before` / `onSuccess` / `onFailure` hooks need access to the same
  *    `$uuid` and the same `$client` instance, and stuffing closures inline
  *    in the provider would obscure the actual lifecycle logic.
@@ -30,7 +30,7 @@ final class EventMonitor
      * holds them, and `print_r()` of any frame that receives the event or
      * calls a hook would otherwise print the raw UUID.
      */
-    public static function install(Event $event, CronMonitorClient $client, string $monitorUuid): Event
+    public static function install(Event $event, CronMonitorClient $client, #[\SensitiveParameter] string $monitorUuid): Event
     {
         $uuid = new \SensitiveParameterValue($monitorUuid);
 

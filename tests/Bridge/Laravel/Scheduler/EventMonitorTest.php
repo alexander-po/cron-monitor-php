@@ -10,13 +10,11 @@ use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
+use CronMonitor\Tests\Support\UnusedEventMutex;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
-use Illuminate\Console\Scheduling\CacheEventMutex;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Container\Container;
-use Illuminate\Contracts\Cache\Factory as CacheFactory;
-use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Contracts\Container\Container as ContainerContract;
 use PHPUnit\Framework\TestCase;
 
@@ -133,20 +131,22 @@ final class EventMonitorTest extends TestCase
         self::assertStringNotContainsString(self::UUID, print_r($event, true));
     }
 
+    public function test_an_event_that_rejects_a_hook_keeps_the_uuid_out_of_trace_arguments(): void
+    {
+        $event = new class(new UnusedEventMutex(), 'reports:nightly') extends Event {
+            public function before(\Closure $callback): never
+            {
+                throw new \LogicException('this event takes no hooks');
+            }
+        };
+        $client = $this->buildClient(new RecordingHttpClient([]));
+
+        $this->assertSecretStaysOutOfTraces(self::UUID, static fn () => EventMonitor::install($event, $client, self::UUID), \LogicException::class);
+    }
+
     private function buildEvent(): Event
     {
-        // The scheduler `Event` constructor needs an `EventMutex`. We pass a
-        // real `CacheEventMutex` backed by a noop cache factory — the mutex
-        // is never consulted in these tests because we invoke the registered
-        // callbacks directly, but the constructor type-hint requires it.
-        $mutex = new CacheEventMutex(new class implements CacheFactory {
-            public function store($name = null): Repository
-            {
-                throw new \LogicException('cache should not be touched in these tests');
-            }
-        });
-
-        return new Event($mutex, 'reports:nightly', null);
+        return new Event(new UnusedEventMutex(), 'reports:nightly', null);
     }
 
     private function buildClient(RecordingHttpClient $http): CronMonitorClient
