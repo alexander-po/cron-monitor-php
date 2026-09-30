@@ -66,6 +66,14 @@ final class MonitorConsoleSubscriberTest extends TestCase
         ]);
     }
 
+    public function test_a_mis_wired_constructor_keeps_the_command_map_out_of_trace_arguments(): void
+    {
+        $client = $this->buildClient(new RecordingHttpClient([]));
+        $notALogger = self::misWiredDependency();
+
+        $this->assertSecretStaysOutOfTraces(self::UUID, static fn () => new MonitorConsoleSubscriber($client, ['app:reports:nightly' => self::UUID], $notALogger), \TypeError::class);
+    }
+
     public function test_subscribes_to_command_error_and_terminate_events(): void
     {
         $events = MonitorConsoleSubscriber::getSubscribedEvents();
@@ -591,17 +599,23 @@ final class MonitorConsoleSubscriberTest extends TestCase
         array $commandMap,
         ?LoggerInterface $logger = null,
     ): MonitorConsoleSubscriber {
+        $client = $this->buildClient($http);
+
+        return null === $logger
+            ? new MonitorConsoleSubscriber($client, $commandMap)
+            : new MonitorConsoleSubscriber($client, $commandMap, $logger);
+    }
+
+    private function buildClient(RecordingHttpClient $http): CronMonitorClient
+    {
         $factory = new HttpFactory();
-        $client = new CronMonitorClient(
+
+        return new CronMonitorClient(
             new Configuration('https://cronheart.com'),
             $http,
             $factory,
             $factory,
         );
-
-        return null === $logger
-            ? new MonitorConsoleSubscriber($client, $commandMap)
-            : new MonitorConsoleSubscriber($client, $commandMap, $logger);
     }
 
     /**

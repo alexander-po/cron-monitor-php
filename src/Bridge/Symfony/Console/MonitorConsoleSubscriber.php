@@ -113,6 +113,7 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
      */
     public function __construct(
         private readonly CronMonitorClient $client,
+        #[\SensitiveParameter]
         private readonly array $commandMap,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {

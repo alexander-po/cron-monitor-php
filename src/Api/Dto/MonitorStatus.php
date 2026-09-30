@@ -7,8 +7,11 @@ namespace CronMonitor\Api\Dto;
 /**
  * A monitor's health state, as computed by the server's scanner.
  *
- *  - `New`    — created, no ping received yet; the scanner does not alert
- *               on the first miss.
+ *  - `New`    — created or resumed, no ping received since. The scanner
+ *               checks it as it checks `Up`: once the deadline plus grace
+ *               passes without a ping, it turns `Late` and alerts, unless
+ *               an incident is already open (a resumed monitor can still
+ *               be inside one).
  *  - `Up`     — last ping arrived within the expected window.
  *  - `Late`   — the deadline plus grace elapsed without a ping.
  *  - `Down`   — an explicit `fail` ping was received.

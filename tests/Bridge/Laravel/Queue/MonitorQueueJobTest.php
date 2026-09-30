@@ -224,9 +224,4 @@ final class MonitorQueueJobTest extends TestCase
             $factory,
         );
     }
-
-    private static function misWiredDependency(): mixed
-    {
-        return 'a string where an object belongs';
-    }
 }

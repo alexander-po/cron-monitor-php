@@ -291,7 +291,7 @@ $monitor = $api->getMonitor((string) getenv('CRON_MONITOR_REPORTS_NIGHTLY_UUID')
 printf("%s %s\n", Vocabulary::value($monitor->status), $monitor->lastPingAt?->format('c') ?? 'never');
 ```
 
-`up` with a timestamp: done. `new` and `never`: no ping arrived; compare the variable name in the map with the environment, check the middleware is on the bus (4a-2) and that the Laravel run went through the scheduler (4b). `late` or `down`: the monitor's schedule or grace does not match how often the job runs. `paused`: paused in the dashboard.
+`up` with a timestamp: done. `new` and `never`: no ping arrived; compare the variable name in the map with the environment, check the middleware is on the bus (4a-2) and that the Laravel run went through the scheduler (4b). `late` and `never`: the same checks, and the first deadline plus grace has already passed, so the monitor has raised a `late` alert to its attached, verified channels; the next `success` or heartbeat ping closes that incident. `late` with a timestamp: the monitor's schedule or grace does not match how often the job runs. `down`: the last run reported a failure: a `fail` ping, which the bridges send for a thrown error, a non-zero exit or a stopping signal, or a non-zero exit-code ping; the dashboard shows the body it sent. `paused`: paused in the dashboard.
 
 ## Step 8: what the exceptions mean
 

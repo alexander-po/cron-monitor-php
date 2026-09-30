@@ -238,9 +238,4 @@ final class ConfigurationTest extends TestCase
         self::assertStringNotContainsString(self::API_KEY, print_r(MonitorApiClient::create($configuration), true));
         self::assertStringNotContainsString(self::API_KEY, print_r(CronMonitorClient::create($configuration), true));
     }
-
-    private static function misWiredDependency(): mixed
-    {
-        return 'a string where an object belongs';
-    }
 }
