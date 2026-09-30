@@ -17,6 +17,7 @@ use CronMonitor\Tests\Support\RecordingHttpClient;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Application;
@@ -180,6 +181,54 @@ final class MonitorConsoleSubscriberTest extends TestCase
         self::assertCount(2, $http->requests);
         self::assertStringEndsWith('/ping/'.self::UUID.'/fail', (string) $http->requests[1]->getUri());
         self::assertStringContainsString('non-zero status 17', (string) $http->requests[1]->getBody());
+    }
+
+    public function test_terminate_carrying_an_interrupting_signal_emits_fail_despite_exit_code_zero(): void
+    {
+        $http = new RecordingHttpClient([new Response(200), new Response(200)]);
+        $subscriber = $this->buildSubscriber($http, ['app:reports:nightly' => self::UUID]);
+
+        $command = $this->commandNamed('app:reports:nightly');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onCommand(new ConsoleCommandEvent($command, $input, $output));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 0, 15));
+
+        self::assertCount(2, $http->requests);
+        self::assertStringEndsWith('/ping/'.self::UUID.'/fail', (string) $http->requests[1]->getUri());
+        self::assertStringStartsWith('interrupted by signal 15', (string) $http->requests[1]->getBody());
+    }
+
+    public function test_interrupting_signal_outranks_a_stashed_error_and_an_unnamed_signal_is_given_by_number(): void
+    {
+        $http = new RecordingHttpClient([new Response(200)]);
+        $subscriber = $this->buildSubscriber($http, ['app:reports:nightly' => self::UUID]);
+
+        $command = $this->commandNamed('app:reports:nightly');
+        $input = new ArrayInput([]);
+        $output = new NullOutput();
+
+        $subscriber->onError(new ConsoleErrorEvent($input, $output, new \RuntimeException('reports blew up'), $command));
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, $input, $output, 1, 200));
+
+        self::assertCount(1, $http->requests);
+        self::assertStringEndsWith('/ping/'.self::UUID.'/fail', (string) $http->requests[0]->getUri());
+        self::assertSame('interrupted by signal 200', (string) $http->requests[0]->getBody());
+    }
+
+    #[RequiresPhpExtension('pcntl')]
+    public function test_interrupting_signal_body_names_the_signal(): void
+    {
+        $http = new RecordingHttpClient([new Response(200)]);
+        $subscriber = $this->buildSubscriber($http, ['app:reports:nightly' => self::UUID]);
+
+        $command = $this->commandNamed('app:reports:nightly');
+        $subscriber->onTerminate(new ConsoleTerminateEvent($command, new ArrayInput([]), new NullOutput(), 143, \SIGTERM));
+
+        self::assertCount(1, $http->requests);
+        self::assertStringEndsWith('/ping/'.self::UUID.'/fail', (string) $http->requests[0]->getUri());
+        self::assertSame(\sprintf('interrupted by signal %d (SIGTERM)', \SIGTERM), (string) $http->requests[0]->getBody());
     }
 
     public function test_error_then_terminate_emits_fail_with_exception_summary(): void

@@ -13,6 +13,7 @@ use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\Event\ConsoleCommandEvent;
 use Symfony\Component\Console\Event\ConsoleErrorEvent;
 use Symfony\Component\Console\Event\ConsoleTerminateEvent;
+use Symfony\Component\Console\SignalRegistry\SignalMap;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
@@ -42,7 +43,10 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  *                                 or a "non-zero exit" placeholder. Exit
  *                                 code 113 (`RETURN_CODE_DISABLED`) is
  *                                 treated as "command was disabled" and
- *                                 produces no ping.
+ *                                 produces no ping. A TERMINATE carrying
+ *                                 an interrupting signal is always `fail`:
+ *                                 Symfony exits a signalled command with
+ *                                 code 0 unless a listener changes it.
  *
  * SDK errors are swallowed: a broken cron-monitor backend must never break
  * the user's command run. We defensively guard against the SDK throwing
@@ -173,6 +177,13 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
             return;
         }
 
+        $signal = $event->getInterruptingSignal();
+        if (null !== $signal) {
+            $this->safePing(fn () => $this->client->fail($uuid, $this->describeSignal($signal)));
+
+            return;
+        }
+
         $exitCode = $event->getExitCode();
 
         // Command was disabled by another listener — we suppressed `start`
@@ -291,6 +302,15 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
                 'message' => $sdkError->getMessage(),
             ]);
         }
+    }
+
+    private function describeSignal(int $signal): string
+    {
+        $name = SignalMap::getSignalName($signal);
+
+        return null === $name
+            ? \sprintf('interrupted by signal %d', $signal)
+            : \sprintf('interrupted by signal %d (%s)', $signal, $name);
     }
 
     private function summariseError(\Throwable $error): string

@@ -198,7 +198,9 @@ policy as an empty YAML map entry.
 No code changes inside the command body. A non-zero exit fires `fail`; an
 uncaught throwable fires `fail` with the exception class, message, and
 file:line in the body so the cron-monitor dashboard shows the immediate
-cause without you tailing logs.
+cause without you tailing logs. A command stopped by a signal Symfony
+handles (`SIGTERM`, `SIGINT`, …) fires `fail` naming the signal, whatever
+its exit code.
 
 ## Laravel scheduler integration
 
