@@ -6,6 +6,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [1.5.2] — 2026-09-30
+
+A patch for the framework bridges: the Laravel set-up paths keep the monitor
+UUID out of stack-frame arguments, `->monitor('uuid')` no longer breaks the
+whole schedule when the ping client cannot be built, and a console command
+stopped by a signal is reported as `fail`. The wire mapping is untouched.
+
 ### Security
 
 - **Setting up the Laravel queue middleware, `EventMonitor::install()` and
@@ -56,7 +65,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   around this, one setting the exit code to `128 + signal`, is now redundant
   and harmless: the ping is `fail` either way.
 
-## [1.5.1] — 2026-09-27
+## [1.5.1] — 2026-09-30
 
 A security patch: a failed call, ping or channel create no longer leaves the
 API token, a monitor UUID or a webhook credential in stack-frame arguments or
