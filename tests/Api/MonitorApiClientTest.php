@@ -29,7 +29,7 @@ use Psr\Http\Message\ResponseInterface;
 
 final class MonitorApiClientTest extends TestCase
 {
-    private const UUID = '550e8400-e29b-41d4-a716-446655440000';
+    private const UUID = '00000000-0000-0000-0000-000000000000';
 
     /**
      * @param list<Response|\Throwable> $queue
@@ -330,13 +330,13 @@ final class MonitorApiClientTest extends TestCase
     {
         $http = new RecordingHttpClient([
             self::jsonResponse(200, [
-                'data' => [self::monitorRow('11111111-1111-4111-8111-111111111111'), self::monitorRow('22222222-2222-4222-8222-222222222222')],
+                'data' => [self::monitorRow('00000000-0000-0000-0000-000000000001'), self::monitorRow('00000000-0000-0000-0000-000000000002')],
                 'total' => 3,
                 'limit' => 2,
                 'offset' => 0,
             ]),
             self::jsonResponse(200, [
-                'data' => [self::monitorRow('33333333-3333-4333-8333-333333333333')],
+                'data' => [self::monitorRow('00000000-0000-0000-0000-000000000003')],
                 'total' => 3,
                 'limit' => 2,
                 'offset' => 2,
@@ -440,13 +440,13 @@ final class MonitorApiClientTest extends TestCase
         // would throw on a third request.
         $http = new RecordingHttpClient([
             self::jsonResponse(200, [
-                'data' => [self::monitorRow('11111111-1111-4111-8111-111111111111'), self::monitorRow('22222222-2222-4222-8222-222222222222')],
+                'data' => [self::monitorRow('00000000-0000-0000-0000-000000000001'), self::monitorRow('00000000-0000-0000-0000-000000000002')],
                 'total' => 99,
                 'limit' => 2,
                 'offset' => 0,
             ]),
             self::jsonResponse(200, [
-                'data' => [self::monitorRow('33333333-3333-4333-8333-333333333333')],
+                'data' => [self::monitorRow('00000000-0000-0000-0000-000000000003')],
                 'total' => 99,
                 'limit' => 2,
                 'offset' => 0,

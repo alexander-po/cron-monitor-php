@@ -108,6 +108,8 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
      */
     private array $attributeUuidCache = [];
 
+    private readonly LoggerInterface $logger;
+
     /**
      * @param array<string, string> $commandMap command name (as registered, e.g. "app:reports:nightly") => monitor UUID
      */
@@ -115,8 +117,9 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
         private readonly CronMonitorClient $client,
         #[\SensitiveParameter]
         private readonly array $commandMap,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public static function getSubscribedEvents(): array

@@ -76,8 +76,14 @@ No PHP install required on the host — everything runs in a Docker
 container against the vendored dependencies:
 
 ```bash
-# Tests
-docker run --rm -v "$PWD":/app -w /app php:8.2-cli vendor/bin/phpunit
+# Tests: the console signal test needs pcntl, which the stock image lacks,
+# and a skipped test fails the run as it fails CI
+docker build -t cron-monitor-php-sdk:8.2 - <<'EOF'
+FROM php:8.2-cli
+RUN docker-php-ext-install pcntl
+EOF
+docker run --rm -v "$PWD":/app -w /app cron-monitor-php-sdk:8.2 \
+    vendor/bin/phpunit --fail-on-skipped
 
 # PHPStan (level 8 — needs more memory than the 128M default)
 docker run --rm -v "$PWD":/app -w /app php:8.2-cli \
@@ -95,7 +101,9 @@ docker run --rm -v "$PWD":/app -w /app php:8.2-cli sh -c \
 ```
 
 CI runs the same three checks plus `composer audit` over GitHub's PHP
-8.2 / 8.3 / 8.4 matrix on the test job; lint + audit run on 8.2 only.
+8.2 / 8.3 / 8.4 matrix on the test job, with `pcntl`; `phpunit.dist.xml`
+fails a skipped test there as it does locally. Lint + audit run on 8.2
+only.
 
 ## Test bootstrap
 

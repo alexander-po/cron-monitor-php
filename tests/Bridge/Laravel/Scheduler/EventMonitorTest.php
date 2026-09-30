@@ -31,7 +31,7 @@ final class EventMonitorTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const UUID = '55555555-5555-4555-8555-555555555555';
+    private const UUID = '00000000-0000-0000-0000-000000000000';
 
     public function test_install_returns_the_same_event_for_fluent_chaining(): void
     {

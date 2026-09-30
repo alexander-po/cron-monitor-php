@@ -8,6 +8,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.5.4] — 2026-09-30
+
+A patch: the Symfony bundle builds in a container that has no logger, the `#[Monitor]` attribute and the sync's `ReconcileResult` keep their monitor UUID out of stack-frame arguments, `print_r()` and `var_dump()` of a `ReconcileResult` mask it, and step 7c of the agent recipe tells a ping from the framework run apart from the CLI heartbeat of step 7a. The wire mapping is untouched.
+
+Also in this release: every UUID in the tests and in the `#[Monitor]` docblock example is an all-zeros placeholder (`00000000-0000-0000-0000-000000000000`, and `…000001` to `…000003` where a file needs distinct values), `phpunit.dist.xml` fails a run with any skipped test, in CI as locally, and the command-line tests no longer read a `CRON_MONITOR_*` variable the developer exported.
+
+### Fixed
+
+- **The bundle no longer fails in a container without a `LoggerInterface` service.** The bundle passes `null` for a logger it cannot find, but the constructors of `CronMonitorClient`, `MonitorApiClient`, `MonitorPingMiddleware` and `MonitorConsoleSubscriber` did not accept `null`, so building any of them threw a `TypeError`. Their `$logger` parameter is now `?LoggerInterface`, and `null` means a `NullLogger`, as in the `create()` factories. FrameworkBundle always registers a logger, so an application built on it was not affected.
+
+### Security
+
+- **The `#[Monitor]` attribute and `ReconcileResult` no longer hand the monitor UUID to frame arguments.** The attribute's constructor throws when it is given both `uuid:` and `env:`, and its frame carried the UUID to a handler that records backtraces, as error trackers do; `ReconcileResult::existing()` and `created()` did the same on a `TypeError`. Each `$uuid` parameter is now `#[\SensitiveParameter]`, and `print_r()` or `var_dump()` of a `ReconcileResult` shows its UUID the way PHP shows such an argument. The `uuid` property still returns it.
+
+### Documentation
+
+- **Step 7c of the agent recipe compares the last ping with the time of step 7b.** The heartbeat of step 7a already sets a last ping, so a status of `up` with a timestamp did not show that the framework wiring of 7b pinged, and a monitor that existed before (a resumed one reads `new` with an old timestamp) matched no row. The recipe now notes the time before 7b, reads `paused` first, since a ping does not update a paused monitor, and reads every other status only after comparing the last ping with that time.
+
 ## [1.5.3] — 2026-09-30
 
 A patch: the Symfony bridges' constructors keep their monitor UUID maps out of stack-frame arguments, and the `MonitorStatus::New` docblock and the agent recipe now say that a monitor that was never pinged alerts on its first miss. The wire mapping is untouched.
@@ -812,7 +830,7 @@ instead of being duplicated in YAML / config.
   at compile time. The kernel subscriber's `$commandMap[$commandName]`
   lookup never matched the actual command name, and start/success/fail
   pings stopped firing without any error or warning log line.
-  Surfaced when a host project (url-shortener) first wired in a real
+  Surfaced when a host project first wired in a real
   Symfony command name (most third-party commands contain hyphens —
   the README's `app:reports:nightly` example used colons only and
   masked the bug). Both `commands:` and `messages:` array nodes now

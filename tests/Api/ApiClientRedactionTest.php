@@ -13,6 +13,7 @@ use CronMonitor\Client\Configuration;
 use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
+use CronMonitor\Tests\Support\UuidPlaceholder;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
@@ -30,9 +31,9 @@ final class ApiClientRedactionTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const UUID = '550e8400-e29b-41d4-a716-446655440000';
+    private const UUID = '00000000-0000-0000-0000-000000000001';
 
-    private const ROTATED_UUID = '9b2e6d41-3c8f-4a57-b1e0-7f5a2c9d4e86';
+    private const ROTATED_UUID = '00000000-0000-0000-0000-000000000002';
 
     private const API_KEY = 'cmk_Vz3Hq8Jw1Mt6Rk4Ny9Bs';
 
@@ -41,11 +42,11 @@ final class ApiClientRedactionTest extends TestCase
         $client = $this->clientThatFailsWith('connection refused');
 
         try {
-            $client->getMonitor(self::UUID);
+            $client->getMonitor(self::uuid());
             self::fail('Expected an ApiTransportException.');
         } catch (ApiTransportException $e) {
             self::assertStringContainsString('/monitors/{uuid}', $e->getMessage());
-            self::assertStringNotContainsStringIgnoringCase(self::UUID, $e->getMessage());
+            self::assertStringNotContainsStringIgnoringCase(self::uuid(), $e->getMessage());
         }
     }
 
@@ -53,14 +54,14 @@ final class ApiClientRedactionTest extends TestCase
     {
         // Guzzle appends the failing request URI to its connection errors.
         $client = $this->clientThatFailsWith(
-            'cURL error 7: Failed to connect for https://cronheart.com/api/v1/monitors/'.self::UUID,
+            'cURL error 7: Failed to connect for https://cronheart.com/api/v1/monitors/'.self::uuid(),
         );
 
         try {
-            $client->getMonitor(self::UUID);
+            $client->getMonitor(self::uuid());
             self::fail('Expected an ApiTransportException.');
         } catch (ApiTransportException $e) {
-            self::assertStringNotContainsStringIgnoringCase(self::UUID, $e->getMessage());
+            self::assertStringNotContainsStringIgnoringCase(self::uuid(), $e->getMessage());
         }
     }
 
@@ -70,14 +71,14 @@ final class ApiClientRedactionTest extends TestCase
         $client = $this->clientThatFailsWith('connection refused', $logger);
 
         try {
-            $client->deleteMonitor(self::UUID);
+            $client->deleteMonitor(self::uuid());
         } catch (ApiTransportException) {
         }
 
         self::assertNotSame([], $logger->records);
         self::assertSame('/api/v1/monitors/{uuid}', $logger->records[0]['context']['route'] ?? null);
         self::assertStringNotContainsStringIgnoringCase(
-            self::UUID,
+            self::uuid(),
             json_encode($logger->records, \JSON_THROW_ON_ERROR),
         );
     }
@@ -87,10 +88,10 @@ final class ApiClientRedactionTest extends TestCase
         $client = $this->clientThatFailsWith('connection refused');
 
         try {
-            $client->getMonitor(self::UUID."\n");
+            $client->getMonitor(self::uuid()."\n");
             self::fail('Expected an InvalidArgumentException.');
         } catch (\InvalidArgumentException|ApiTransportException $e) {
-            self::assertStringNotContainsStringIgnoringCase(self::UUID, $e->getMessage());
+            self::assertStringNotContainsStringIgnoringCase(self::uuid(), $e->getMessage());
             self::assertInstanceOf(\InvalidArgumentException::class, $e);
         }
     }
@@ -101,12 +102,12 @@ final class ApiClientRedactionTest extends TestCase
         $client = $this->clientThatFailsWith('connection refused', $logger);
 
         try {
-            $client->deleteMonitor(self::UUID."\n");
+            $client->deleteMonitor(self::uuid()."\n");
         } catch (\InvalidArgumentException|ApiTransportException) {
         }
 
         self::assertStringNotContainsStringIgnoringCase(
-            self::UUID,
+            self::uuid(),
             json_encode($logger->records, \JSON_THROW_ON_ERROR),
         );
         self::assertSame([], $logger->records);
@@ -136,16 +137,16 @@ final class ApiClientRedactionTest extends TestCase
         // branch on its type — but PHP renders the whole chain, and that
         // rendering is what gets pasted somewhere public.
         $client = $this->clientThatFailsWith(
-            'cURL error 7: Failed to connect for https://cronheart.com/api/v1/monitors/'.self::UUID,
+            'cURL error 7: Failed to connect for https://cronheart.com/api/v1/monitors/'.self::uuid(),
         );
 
         try {
-            $client->getMonitor(self::UUID);
+            $client->getMonitor(self::uuid());
             self::fail('Expected an ApiTransportException.');
         } catch (ApiTransportException $e) {
             self::assertNotNull($e->getPrevious());
-            self::assertStringContainsString(self::UUID, (string) $e->getPrevious()->getMessage());
-            self::assertStringNotContainsStringIgnoringCase(self::UUID, (string) $e);
+            self::assertStringContainsString(self::uuid(), (string) $e->getPrevious()->getMessage());
+            self::assertStringNotContainsStringIgnoringCase(self::uuid(), (string) $e);
         }
     }
 
@@ -154,7 +155,7 @@ final class ApiClientRedactionTest extends TestCase
         $client = $this->clientThatFailsWith('rejected [Authorization: Bearer cmk_example_notarealtoken]');
 
         try {
-            $client->getMonitor(self::UUID);
+            $client->getMonitor(self::uuid());
             self::fail('Expected an ApiTransportException.');
         } catch (ApiTransportException $e) {
             self::assertStringNotContainsString('cmk_example_notarealtoken', $e->getMessage());
@@ -165,26 +166,26 @@ final class ApiClientRedactionTest extends TestCase
     public function test_a_failed_monitor_call_keeps_the_uuid_out_of_trace_arguments(): void
     {
         $calls = [
-            static fn (MonitorApiClient $c): mixed => $c->getMonitor(self::UUID),
-            static fn (MonitorApiClient $c): mixed => $c->updateMonitor(self::UUID, new UpdateMonitorRequest(name: 'Renamed')),
+            static fn (MonitorApiClient $c): mixed => $c->getMonitor(self::uuid()),
+            static fn (MonitorApiClient $c): mixed => $c->updateMonitor(self::uuid(), new UpdateMonitorRequest(name: 'Renamed')),
             static function (MonitorApiClient $c): mixed {
-                $c->deleteMonitor(self::UUID);
+                $c->deleteMonitor(self::uuid());
 
                 return null;
             },
-            static fn (MonitorApiClient $c): mixed => $c->pauseMonitor(self::UUID),
-            static fn (MonitorApiClient $c): mixed => $c->resumeMonitor(self::UUID),
-            static fn (MonitorApiClient $c): mixed => $c->snoozeMonitor(self::UUID, SnoozeDuration::OneHour),
-            static fn (MonitorApiClient $c): mixed => $c->unsnoozeMonitor(self::UUID),
-            static fn (MonitorApiClient $c): mixed => $c->rotateMonitorUuid(self::UUID),
-            static fn (MonitorApiClient $c): mixed => $c->listPings(self::UUID),
-            static fn (MonitorApiClient $c): mixed => iterator_to_array($c->allPings(self::UUID)),
-            static fn (MonitorApiClient $c): mixed => $c->listAlerts(self::UUID),
-            static fn (MonitorApiClient $c): mixed => iterator_to_array($c->allAlerts(self::UUID)),
+            static fn (MonitorApiClient $c): mixed => $c->pauseMonitor(self::uuid()),
+            static fn (MonitorApiClient $c): mixed => $c->resumeMonitor(self::uuid()),
+            static fn (MonitorApiClient $c): mixed => $c->snoozeMonitor(self::uuid(), SnoozeDuration::OneHour),
+            static fn (MonitorApiClient $c): mixed => $c->unsnoozeMonitor(self::uuid()),
+            static fn (MonitorApiClient $c): mixed => $c->rotateMonitorUuid(self::uuid()),
+            static fn (MonitorApiClient $c): mixed => $c->listPings(self::uuid()),
+            static fn (MonitorApiClient $c): mixed => iterator_to_array($c->allPings(self::uuid())),
+            static fn (MonitorApiClient $c): mixed => $c->listAlerts(self::uuid()),
+            static fn (MonitorApiClient $c): mixed => iterator_to_array($c->allAlerts(self::uuid())),
         ];
 
         foreach ($calls as $call) {
-            foreach ([self::UUID, self::API_KEY] as $secret) {
+            foreach ([self::uuid(), self::API_KEY] as $secret) {
                 $client = $this->clientThatAnswers(new Response(404, ['Content-Type' => 'application/problem+json'], '{"title":"Not Found","detail":"No such monitor."}'));
 
                 $this->assertSecretStaysOutOfTraces($secret, static fn () => $call($client), NotFoundException::class);
@@ -196,18 +197,18 @@ final class ApiClientRedactionTest extends TestCase
     {
         $client = $this->clientThatAnswers();
 
-        foreach ([self::UUID, self::API_KEY] as $secret) {
-            $this->assertSecretStaysOutOfTraces($secret, static fn () => $client->getMonitor(self::UUID.' '), \InvalidArgumentException::class);
+        foreach ([self::uuid(), self::API_KEY] as $secret) {
+            $this->assertSecretStaysOutOfTraces($secret, static fn () => $client->getMonitor(self::uuid().' '), \InvalidArgumentException::class);
         }
     }
 
     public function test_a_refused_connection_keeps_the_bearer_token_and_the_uuid_out_of_trace_arguments(): void
     {
         $client = MonitorApiClient::create(new Configuration('https://127.0.0.1:1', timeoutSeconds: 1.0, retries: 0, apiKey: self::API_KEY));
-        $call = static fn () => $client->getMonitor(self::UUID);
+        $call = static fn () => $client->getMonitor(self::uuid());
 
         $printed = self::printedWithoutFrameArguments($call, ApiTransportException::class);
-        foreach ([self::API_KEY, self::UUID] as $secret) {
+        foreach ([self::API_KEY, self::uuid()] as $secret) {
             $this->assertSecretStaysOutOfTraces($secret, $call, ApiTransportException::class);
 
             self::assertStringNotContainsString($secret, $printed);
@@ -218,8 +219,8 @@ final class ApiClientRedactionTest extends TestCase
     {
         $client = $this->clientThatAnswers();
 
-        foreach ([self::UUID, self::API_KEY] as $secret) {
-            $this->assertSecretStaysOutOfTraces($secret, static fn () => $client->updateMonitor(self::UUID, new UpdateMonitorRequest(name: "Nightly\xB1report")), ApiTransportException::class);
+        foreach ([self::uuid(), self::API_KEY] as $secret) {
+            $this->assertSecretStaysOutOfTraces($secret, static fn () => $client->updateMonitor(self::uuid(), new UpdateMonitorRequest(name: "Nightly\xB1report")), ApiTransportException::class);
         }
     }
 
@@ -235,11 +236,19 @@ final class ApiClientRedactionTest extends TestCase
             'ping_url' => 'https://cronheart.com/ping/'.self::ROTATED_UUID,
         ];
 
-        foreach ([self::UUID, self::ROTATED_UUID, self::API_KEY] as $secret) {
+        foreach ([self::uuid(), self::ROTATED_UUID, self::API_KEY] as $secret) {
             $client = $this->clientThatAnswers(new Response(200, ['Content-Type' => 'application/json'], (string) json_encode($rotated)));
 
-            $this->assertSecretStaysOutOfTraces($secret, static fn () => $client->rotateMonitorUuid(self::UUID), ApiTransportException::class);
+            $this->assertSecretStaysOutOfTraces($secret, static fn () => $client->rotateMonitorUuid(self::uuid()), ApiTransportException::class);
         }
+    }
+
+    /**
+     * The redactor and the route mask must match the letters a real UUID has.
+     */
+    private static function uuid(): string
+    {
+        return UuidPlaceholder::withHexLetters(self::UUID);
     }
 
     private function clientThatAnswers(ResponseInterface ...$responses): MonitorApiClient

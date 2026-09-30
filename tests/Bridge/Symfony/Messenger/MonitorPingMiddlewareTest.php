@@ -24,7 +24,7 @@ final class MonitorPingMiddlewareTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const UUID = '22222222-2222-4222-8222-222222222222';
+    private const UUID = '00000000-0000-0000-0000-000000000000';
 
     public function test_a_failed_ping_keeps_the_uuid_out_of_the_frames_a_logger_records(): void
     {

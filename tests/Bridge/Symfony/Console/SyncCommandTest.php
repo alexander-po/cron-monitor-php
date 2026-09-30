@@ -138,7 +138,7 @@ final class SyncCommandTest extends TestCase
 
     public function test_apply_creates_missing_monitor_and_prints_uuid(): void
     {
-        $uuid = '22222222-2222-4222-8222-222222222222';
+        $uuid = '00000000-0000-0000-0000-000000000001';
         $http = new RecordingHttpClient([self::listPage(), self::createdMonitor($uuid)]);
         $command = new SyncCommand($this->inventory(), $this->apiClient($http), new Configuration('https://cronheart.com', apiKey: 'cmk_test'));
 
@@ -220,7 +220,7 @@ final class SyncCommandTest extends TestCase
 
     public function test_a_channel_with_a_trailing_newline_reaches_the_create_as_given(): void
     {
-        $http = new RecordingHttpClient([self::listPage(), self::createdMonitor('00000000-0000-4000-a000-000000000000')]);
+        $http = new RecordingHttpClient([self::listPage(), self::createdMonitor('00000000-0000-0000-0000-000000000002')]);
         $command = new SyncCommand($this->inventory(), $this->apiClient($http), new Configuration('https://cronheart.com', apiKey: 'cmk_test'));
 
         $tester = new CommandTester($command);

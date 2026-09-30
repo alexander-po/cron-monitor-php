@@ -209,7 +209,7 @@ final class ChannelLifecycleApiTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/^The channel id is not valid \(expected a positive integer, digits only\)\.$/D');
-        $client->deleteChannel('00000000-0000-4000-a000-000000000000');
+        $client->deleteChannel('00000000-0000-0000-0000-000000000000');
     }
 
     public function test_update_channel_sends_label(): void

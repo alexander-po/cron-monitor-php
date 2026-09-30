@@ -24,7 +24,7 @@ final class MonitorTest extends TestCase
     private static function payload(array $overrides = []): array
     {
         return array_merge([
-            'uuid' => '550e8400-e29b-41d4-a716-446655440000',
+            'uuid' => '00000000-0000-0000-0000-000000000001',
             'name' => 'Nightly report',
             'schedule_kind' => 'cron',
             'schedule_expr' => '0 2 * * *',
@@ -34,8 +34,8 @@ final class MonitorTest extends TestCase
             'next_expected_at' => '2026-01-02T02:00:00+00:00',
             'last_ping_at' => '2026-01-01T02:00:15+00:00',
             'created_at' => '2025-12-31T12:00:00+00:00',
-            'ping_url' => 'https://cronheart.com/ping/550e8400-e29b-41d4-a716-446655440000',
-            'badge_url' => 'https://cronheart.com/badge/550e8400-e29b-41d4-a716-446655440000.svg',
+            'ping_url' => 'https://cronheart.com/ping/00000000-0000-0000-0000-000000000001',
+            'badge_url' => 'https://cronheart.com/badge/00000000-0000-0000-0000-000000000001.svg',
         ], $overrides);
     }
 
@@ -43,7 +43,7 @@ final class MonitorTest extends TestCase
     {
         $monitor = Monitor::fromArray(self::payload());
 
-        self::assertSame('550e8400-e29b-41d4-a716-446655440000', $monitor->uuid);
+        self::assertSame('00000000-0000-0000-0000-000000000001', $monitor->uuid);
         self::assertSame('Nightly report', $monitor->name);
         self::assertSame(ScheduleKind::Cron, $monitor->scheduleKind);
         self::assertSame('0 2 * * *', $monitor->scheduleExpr);
@@ -203,7 +203,7 @@ final class MonitorTest extends TestCase
         // would keep the suite green and break every downstream caller with an
         // ArgumentCountError.
         $monitor = new Monitor(
-            '550e8400-e29b-41d4-a716-446655440000',
+            '00000000-0000-0000-0000-000000000001',
             'Nightly report',
             ScheduleKind::Cron,
             '0 2 * * *',
@@ -237,7 +237,7 @@ final class MonitorTest extends TestCase
 
     public function test_a_malformed_monitor_keeps_its_uuid_out_of_trace_arguments(): void
     {
-        $uuid = '5d8c1f37-2a64-4e9b-8f03-c7a1e6b4d290';
+        $uuid = '00000000-0000-0000-0000-000000000002';
         $identified = ['uuid' => $uuid, 'ping_url' => 'https://cronheart.com/ping/'.$uuid, 'badge_url' => 'https://cronheart.com/badge/'.$uuid.'.svg'];
 
         foreach ([['grace_seconds' => 'sixty'], ['channels' => 'email']] as $malformed) {

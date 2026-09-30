@@ -37,7 +37,7 @@ if ('/api/v1/monitors' === $path) {
     http_response_code(200);
     echo json_encode([
         'data' => [[
-            'uuid' => '550e8400-e29b-41d4-a716-446655440000',
+            'uuid' => '00000000-0000-0000-0000-000000000000',
             'name' => 'Smoke monitor',
             'schedule_kind' => 'interval',
             'schedule_expr' => '300',
@@ -47,8 +47,8 @@ if ('/api/v1/monitors' === $path) {
             'next_expected_at' => null,
             'last_ping_at' => null,
             'created_at' => '2026-01-01T00:00:00+00:00',
-            'ping_url' => 'http://127.0.0.1/ping/550e8400-e29b-41d4-a716-446655440000',
-            'badge_url' => 'http://127.0.0.1/badge/550e8400-e29b-41d4-a716-446655440000.svg',
+            'ping_url' => 'http://127.0.0.1/ping/00000000-0000-0000-0000-000000000000',
+            'badge_url' => 'http://127.0.0.1/badge/00000000-0000-0000-0000-000000000000.svg',
         ]],
         'total' => 1,
         'limit' => 50,

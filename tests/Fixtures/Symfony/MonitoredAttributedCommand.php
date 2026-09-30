@@ -26,8 +26,8 @@ use Symfony\Component\Console\Command\Command;
  * removes that surprise without losing readability inside the test
  * assertions, which reference `MonitoredAttributedCommand::UUID`.
  */
-#[Monitor(uuid: '22222222-2222-4222-8222-222222222222')]
+#[Monitor(uuid: '00000000-0000-0000-0000-000000000000')]
 final class MonitoredAttributedCommand extends Command
 {
-    public const UUID = '22222222-2222-4222-8222-222222222222';
+    public const UUID = '00000000-0000-0000-0000-000000000000';
 }

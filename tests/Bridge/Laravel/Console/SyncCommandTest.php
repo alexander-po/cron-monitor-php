@@ -143,7 +143,7 @@ final class SyncCommandTest extends TestCase
 
     public function test_apply_creates_missing_monitor(): void
     {
-        $uuid = '22222222-2222-4222-8222-222222222222';
+        $uuid = '00000000-0000-0000-0000-000000000001';
         $http = new RecordingHttpClient([self::listPage(), self::createdMonitor($uuid)]);
         $tester = $this->tester($http, $this->scheduleWith('reports:run'));
 
@@ -183,7 +183,7 @@ final class SyncCommandTest extends TestCase
 
     public function test_a_channel_with_a_trailing_newline_reaches_the_create_as_given(): void
     {
-        $http = new RecordingHttpClient([self::listPage(), self::createdMonitor('00000000-0000-4000-a000-000000000000')]);
+        $http = new RecordingHttpClient([self::listPage(), self::createdMonitor('00000000-0000-0000-0000-000000000002')]);
         $tester = $this->tester($http, $this->scheduleWith('reports:run'));
 
         $exit = $tester->execute(['--apply' => true, '--channel' => "7\n"]);
@@ -194,7 +194,7 @@ final class SyncCommandTest extends TestCase
 
     public function test_apply_threads_the_event_timezone_into_the_created_monitor(): void
     {
-        $uuid = '33333333-3333-4333-8333-333333333333';
+        $uuid = '00000000-0000-0000-0000-000000000003';
         $http = new RecordingHttpClient([self::listPage(), self::createdMonitor($uuid)]);
         $tester = $this->tester($http, $this->scheduleInTimezone('reports:run', 'America/New_York'));
 

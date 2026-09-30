@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace CronMonitor\Tests\Attribute;
 
 use CronMonitor\Attribute\Monitor;
+use CronMonitor\Tests\Support\SecretTraceAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class MonitorTest extends TestCase
 {
+    use SecretTraceAssertions;
+
     private const TEST_ENV_VAR = 'CRON_MONITOR_TEST_UUID_FOR_MONITOR_TEST';
 
-    private const TEST_UUID = '88888888-8888-4888-8888-888888888888';
+    private const TEST_UUID = '00000000-0000-0000-0000-000000000000';
 
     protected function tearDown(): void
     {
@@ -20,6 +23,11 @@ final class MonitorTest extends TestCase
         // three lookup paths the resolver checks.
         unset($_ENV[self::TEST_ENV_VAR], $_SERVER[self::TEST_ENV_VAR]);
         putenv(self::TEST_ENV_VAR);
+    }
+
+    public function test_a_misused_attribute_keeps_its_uuid_out_of_trace_arguments(): void
+    {
+        $this->assertSecretStaysOutOfTraces(self::TEST_UUID, static fn () => new Monitor(uuid: self::TEST_UUID, env: self::TEST_ENV_VAR), \InvalidArgumentException::class);
     }
 
     public function test_uuid_form_constructs(): void

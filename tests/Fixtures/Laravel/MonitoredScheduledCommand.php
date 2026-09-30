@@ -14,10 +14,10 @@ use Illuminate\Console\Command;
  * by hand — see the Symfony fixture's notes; the same parse-order
  * argument applies here.
  */
-#[Monitor(uuid: '77777777-7777-4777-8777-777777777777')]
+#[Monitor(uuid: '00000000-0000-0000-0000-000000000001')]
 final class MonitoredScheduledCommand extends Command
 {
-    public const UUID = '77777777-7777-4777-8777-777777777777';
+    public const UUID = '00000000-0000-0000-0000-000000000001';
 
     /** @var string */
     protected $signature = 'reports:nightly';
