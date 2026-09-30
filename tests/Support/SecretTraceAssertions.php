@@ -110,6 +110,15 @@ trait SecretTraceAssertions
     }
 
     /**
+     * A value of the wrong type for a typed parameter, returned as `mixed` so
+     * the call that receives it type-checks and PHP raises the `TypeError`.
+     */
+    private static function misWiredDependency(): mixed
+    {
+        return 'a string where an object belongs';
+    }
+
+    /**
      * The arguments of every frame between the throw and the test, built-in
      * functions included. Frames of any class under the tests' namespace, and
      * PHPUnit's, hold the fixtures, so the walk stops at the first one: a test

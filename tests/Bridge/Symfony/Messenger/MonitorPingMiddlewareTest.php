@@ -49,6 +49,14 @@ final class MonitorPingMiddlewareTest extends TestCase
         ]);
     }
 
+    public function test_a_mis_wired_constructor_keeps_the_monitor_map_out_of_trace_arguments(): void
+    {
+        $client = $this->buildClient(new RecordingHttpClient([]));
+        $notALogger = self::misWiredDependency();
+
+        $this->assertSecretStaysOutOfTraces(self::UUID, static fn () => new MonitorPingMiddleware($client, [\stdClass::class => self::UUID], $notALogger), \TypeError::class);
+    }
+
     public function test_skips_pinging_when_envelope_has_no_received_stamp(): void
     {
         $http = new RecordingHttpClient([]);
@@ -119,15 +127,19 @@ final class MonitorPingMiddlewareTest extends TestCase
      */
     private function buildMiddleware(RecordingHttpClient $http, array $monitorMap): MonitorPingMiddleware
     {
+        return new MonitorPingMiddleware($this->buildClient($http), $monitorMap);
+    }
+
+    private function buildClient(RecordingHttpClient $http): CronMonitorClient
+    {
         $factory = new HttpFactory();
-        $client = new CronMonitorClient(
+
+        return new CronMonitorClient(
             new Configuration('https://cronheart.com'),
             $http,
             $factory,
             $factory,
         );
-
-        return new MonitorPingMiddleware($client, $monitorMap);
     }
 
     private function stackThatReturns(Envelope $envelope): StackInterface

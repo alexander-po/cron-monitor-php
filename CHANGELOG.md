@@ -8,6 +8,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.5.3] — 2026-09-30
+
+A patch: the Symfony bridges' constructors keep their monitor UUID maps out of stack-frame arguments, and the `MonitorStatus::New` docblock and the agent recipe now say that a monitor that was never pinged alerts on its first miss. The wire mapping is untouched.
+
+Also in this release: a test per bridge that `cron-monitor:sync` exits 1 naming a configuration the client rejects, without the API key in its output, and CI that requires `pcntl` on every test job, so the console signal test can no longer skip unnoticed.
+
+### Security
+
+- **The Symfony bridges' constructors no longer hand their UUID maps to frame arguments.** The `$monitorMap` of `MonitorPingMiddleware` and the `$commandMap` of `MonitorConsoleSubscriber` map message classes and command names to monitor UUIDs, and a `TypeError` thrown by either constructor (a mis-wired logger, for instance) carried the whole map in the constructor frame's arguments, where a handler that records backtraces, as error trackers do, read it. Both parameters are now `#[\SensitiveParameter]`, as the constructor of the Laravel queue middleware has been since 1.5.2.
+
+### Documentation
+
+- **`MonitorStatus::New` no longer says the first miss goes unalerted.** The service checks a monitor that has never been pinged as it checks an `up` one: once its first deadline plus grace passes without a ping, it turns `late` and raises a `late` alert. The docblock now says so, and counts a resumed monitor as `new` too.
+- **The agent recipe reads `late` and `down` apart.** Step 7c of `skills/add-cronheart/SKILL.md` put both down to a schedule that does not match the job. A `late` monitor that was never pinged has the wiring problem of a `new` one and has already raised its alert; `down` means the last run reported a failure.
+
 ## [1.5.2] — 2026-09-30
 
 A patch for the framework bridges: the Laravel set-up paths keep the monitor

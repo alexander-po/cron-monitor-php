@@ -6,13 +6,23 @@ namespace CronMonitor\Tests\Bridge\Symfony\Console;
 
 use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Bridge\Symfony\Console\SyncCommand;
+use CronMonitor\Bridge\Symfony\DependencyInjection\CronMonitorExtension;
 use CronMonitor\Bridge\Symfony\Scheduler\ScheduleInventory;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Client\ClientInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\CommandLoader\CommandLoaderInterface;
+use Symfony\Component\Console\DependencyInjection\AddConsoleCommandPass;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Tester\ApplicationTester;
 use Symfony\Component\Console\Tester\CommandTester;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Scheduler\RecurringMessage;
 use Symfony\Component\Scheduler\Schedule;
 use Symfony\Component\Scheduler\ScheduleProviderInterface;
@@ -152,6 +162,31 @@ final class SyncCommandTest extends TestCase
         self::assertSame(1, $exit);
         self::assertStringContainsString('API token', $tester->getDisplay());
         self::assertSame([], $http->requests);
+    }
+
+    public function test_a_configuration_that_cannot_be_built_fails_the_command_naming_the_problem(): void
+    {
+        $token = 'cmk_0000000000000000';
+        $container = new ContainerBuilder();
+        $container->registerExtension(new CronMonitorExtension());
+        $container->loadFromExtension('cron_monitor', ['api_key' => $token."\n"]);
+        $container->register(ClientInterface::class, RecordingHttpClient::class)->setArguments([[]]);
+        $container->register(LoggerInterface::class, NullLogger::class);
+        $container->addCompilerPass(new AddConsoleCommandPass());
+        $container->compile();
+        $commandLoader = $container->get('console.command_loader');
+        self::assertInstanceOf(CommandLoaderInterface::class, $commandLoader);
+        $application = new Application();
+        $application->setAutoExit(false);
+        $application->setCommandLoader($commandLoader);
+
+        $tester = new ApplicationTester($application);
+        $exit = $tester->run(['command' => 'cron-monitor:sync'], ['verbosity' => OutputInterface::VERBOSITY_DEBUG]);
+
+        self::assertSame(1, $exit);
+        $unwrapped = (string) preg_replace('/\s+/', '', $tester->getDisplay());
+        self::assertStringContainsString(str_replace(' ', '', 'API key must not contain control characters'), $unwrapped);
+        self::assertStringNotContainsString(substr($token, 0, 12), $unwrapped);
     }
 
     public function test_apply_skips_a_non_cron_trigger_without_creating_it(): void

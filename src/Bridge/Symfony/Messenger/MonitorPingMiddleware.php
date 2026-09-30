@@ -34,6 +34,7 @@ final class MonitorPingMiddleware implements MiddlewareInterface
      */
     public function __construct(
         private readonly CronMonitorClient $client,
+        #[\SensitiveParameter]
         private readonly array $monitorMap,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {

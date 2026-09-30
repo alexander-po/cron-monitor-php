@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Tests\Bridge\Laravel;
 
+use CronMonitor\Bridge\Laravel\Console\SyncCommand;
 use CronMonitor\Bridge\Laravel\CronMonitorServiceProvider;
 use CronMonitor\Tests\Fixtures\Laravel\MonitoredScheduledCommand;
 use CronMonitor\Tests\Support\RecordingHttpClient;
@@ -11,6 +12,7 @@ use CronMonitor\Tests\Support\UnusedEventMutex;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Console\Application as Artisan;
 use Illuminate\Console\Scheduling\Event;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernelContract;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
@@ -18,10 +20,15 @@ use Illuminate\Events\Dispatcher;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
+use Symfony\Component\Console\Application as SymfonyApplication;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Console\Output\OutputInterface;
 
 final class CronMonitorServiceProviderTest extends TestCase
 {
     private const UUID = '00000000-0000-0000-0000-000000000000';
+    private const TOKEN = 'cmk_0000000000000000';
 
     protected function tearDown(): void
     {
@@ -91,6 +98,39 @@ final class CronMonitorServiceProviderTest extends TestCase
         self::assertCount(1, self::hooks($event, 'afterCallbacks'));
     }
 
+    /**
+     * @param array<string, mixed> $settings
+     */
+    #[DataProvider('settingsTheSyncReports')]
+    public function test_sync_fails_naming_a_configuration_that_cannot_be_built(array $settings, string $problem): void
+    {
+        $container = self::bootProvider($settings);
+        $container->instance(Schedule::class, new class extends Schedule {
+            public function __construct()
+            {
+            }
+        });
+        $artisan = new Artisan($container, new Dispatcher($container), 'test');
+        $artisan->add(new SyncCommand());
+        $output = new BufferedOutput(OutputInterface::VERBOSITY_DEBUG);
+
+        $exit = self::runLikeTheConsoleKernel($artisan, new ArrayInput(['command' => 'cron-monitor:sync']), $output);
+
+        self::assertSame(1, $exit);
+        $unwrapped = (string) preg_replace('/\s+/', '', $output->fetch());
+        self::assertStringContainsString(str_replace(' ', '', $problem), $unwrapped);
+        self::assertStringNotContainsString(substr(self::TOKEN, 0, 12), $unwrapped);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function settingsTheSyncReports(): iterable
+    {
+        yield 'an API key with a trailing newline' => [['endpoint' => 'https://cronheart.com', 'api_key' => self::TOKEN."\n"], 'API key must not contain control characters'];
+        yield 'an API key env() read as a boolean' => [['endpoint' => 'https://cronheart.com', 'api_key' => true], '($apiKey) must be of type ?string'];
+    }
+
     public function test_a_uuid_read_from_the_attribute_stays_out_of_the_frames_that_build_the_client(): void
     {
         $container = self::bootProvider(['endpoint' => 'https://cronheart.com']);
@@ -139,6 +179,11 @@ final class CronMonitorServiceProviderTest extends TestCase
                 return false;
             }
 
+            public function runningUnitTests(): bool
+            {
+                return true;
+            }
+
             public function configurationIsCached(): bool
             {
                 return true;
@@ -177,6 +222,22 @@ final class CronMonitorServiceProviderTest extends TestCase
         $provider->boot();
 
         return $container;
+    }
+
+    /**
+     * Artisan leaves an exception to the framework's console kernel, which the
+     * dev dependencies do not install; the kernel reports it, renders it with
+     * Symfony's renderer and exits 1, and this does the last two.
+     */
+    private static function runLikeTheConsoleKernel(Artisan $artisan, ArrayInput $input, OutputInterface $output): int
+    {
+        try {
+            return $artisan->run($input, $output);
+        } catch (\Throwable $e) {
+            (new SymfonyApplication())->renderThrowable($e, $output);
+
+            return 1;
+        }
     }
 
     /**
