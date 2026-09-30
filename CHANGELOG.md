@@ -42,6 +42,20 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   then misses its pings and the service alerts on them;
   `artisan cron-monitor:sync` still reports the configuration error.
 
+- **A console command stopped by a signal is reported as `fail`, not
+  `success`.** With `pcntl` loaded, Symfony Console answers `SIGINT`,
+  `SIGQUIT`, `SIGTERM`, `SIGUSR1`, `SIGUSR2` and `SIGALRM` by dispatching
+  `TERMINATE` and exiting, with exit code `0` unless a `ConsoleEvents::SIGNAL`
+  listener changes it. `MonitorConsoleSubscriber` read that `0` as a clean run,
+  so a command killed by its supervisor (a `SIGTERM` on a timeout, say) sent
+  `success`. A `TERMINATE` that carries an interrupting signal now sends
+  `fail` with a body naming it, such as `interrupted by signal 15 (SIGTERM)`,
+  whatever the exit code; that includes a command whose own `handleSignal()`
+  returns an exit code, while one that returns `false` and runs on to its
+  normal end is unaffected. A `SIGNAL` listener an application added to work
+  around this, one setting the exit code to `128 + signal`, is now redundant
+  and harmless: the ping is `fail` either way.
+
 ## [1.5.1] — 2026-09-27
 
 A security patch: a failed call, ping or channel create no longer leaves the
