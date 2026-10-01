@@ -20,8 +20,8 @@ final class ConfigurationTest extends TestCase
     {
         $input = [
             'commands' => [
-                'app:short-links:purge-disabled' => '33333333-3333-3333-3333-333333333333',
-                'app:reports:nightly' => '11111111-1111-1111-1111-111111111111',
+                'app:short-links:purge-disabled' => '00000000-0000-0000-0000-000000000001',
+                'app:reports:nightly' => '00000000-0000-0000-0000-000000000002',
             ],
         ];
 
@@ -29,8 +29,8 @@ final class ConfigurationTest extends TestCase
 
         self::assertSame(
             [
-                'app:short-links:purge-disabled' => '33333333-3333-3333-3333-333333333333',
-                'app:reports:nightly' => '11111111-1111-1111-1111-111111111111',
+                'app:short-links:purge-disabled' => '00000000-0000-0000-0000-000000000001',
+                'app:reports:nightly' => '00000000-0000-0000-0000-000000000002',
             ],
             $processed['commands'],
             'Symfony command names commonly contain hyphens; the bundle must not '.
@@ -43,14 +43,14 @@ final class ConfigurationTest extends TestCase
     {
         $input = [
             'messages' => [
-                'App\\Message\\Nightly_Report' => '22222222-2222-2222-2222-222222222222',
+                'App\\Message\\Nightly_Report' => '00000000-0000-0000-0000-000000000003',
             ],
         ];
 
         $processed = $this->process($input);
 
         self::assertSame(
-            ['App\\Message\\Nightly_Report' => '22222222-2222-2222-2222-222222222222'],
+            ['App\\Message\\Nightly_Report' => '00000000-0000-0000-0000-000000000003'],
             $processed['messages'],
         );
     }

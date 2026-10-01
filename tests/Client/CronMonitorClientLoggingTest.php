@@ -11,6 +11,7 @@ use CronMonitor\Tests\Support\FailingPsr17Factory;
 use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
+use CronMonitor\Tests\Support\UuidPlaceholder;
 use GuzzleHttp\Psr7\HttpFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -29,7 +30,7 @@ final class CronMonitorClientLoggingTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const UUID = '550e8400-e29b-41d4-a716-446655440000';
+    private const UUID = '00000000-0000-0000-0000-000000000001';
 
     /**
      * @return iterable<string, array{\Closure(CronMonitorClient): mixed, string}>
@@ -112,19 +113,20 @@ final class CronMonitorClientLoggingTest extends TestCase
         // stores one canonical spelling. If the digest followed the spelling,
         // two call sites naming the same monitor would land under two keys and
         // the join this format exists for would quietly stop working.
+        $withHexLetters = UuidPlaceholder::withHexLetters(self::UUID);
         $lower = new InMemoryLogger();
         $upper = new InMemoryLogger();
 
         $this->clientWith(new RecordingHttpClient([$this->transportError('boom')]), $lower)
-            ->heartbeat(strtolower(self::UUID));
+            ->heartbeat($withHexLetters);
         $this->clientWith(new RecordingHttpClient([$this->transportError('boom')]), $upper)
-            ->heartbeat(strtoupper(self::UUID));
+            ->heartbeat(strtoupper($withHexLetters));
 
         self::assertSame(
             $this->recordAt('warning', $lower)['context']['monitor_uuid_hash'] ?? null,
             $this->recordAt('warning', $upper)['context']['monitor_uuid_hash'] ?? null,
         );
-        self::assertRawUuidAbsent($upper);
+        self::assertRawUuidAbsent($upper, $withHexLetters);
     }
 
     public function test_an_api_key_quoted_by_the_transport_is_removed(): void
@@ -175,17 +177,18 @@ final class CronMonitorClientLoggingTest extends TestCase
     {
         // Guzzle appends the full request URI to its connection errors, and
         // for a ping that URI *is* the credential.
+        $uuid = UuidPlaceholder::withHexLetters(self::UUID);
         $quoted = $this->transportError(
-            'cURL error 7: Failed to connect for https://cronheart.com/ping/'.self::UUID.'/success',
+            'cURL error 7: Failed to connect for https://cronheart.com/ping/'.$uuid.'/success',
         );
         $logger = new InMemoryLogger();
         $client = $this->clientWith(new RecordingHttpClient([$quoted]), $logger);
 
-        $result = $client->success(self::UUID, 'ok');
+        $result = $client->success($uuid, 'ok');
 
-        self::assertRawUuidAbsent($logger);
+        self::assertRawUuidAbsent($logger, $uuid);
         self::assertIsString($result->errorMessage);
-        self::assertStringNotContainsStringIgnoringCase(self::UUID, $result->errorMessage);
+        self::assertStringNotContainsStringIgnoringCase($uuid, $result->errorMessage);
     }
 
     public function test_a_uuid_with_a_trailing_newline_is_rejected_before_a_transport_can_quote_it(): void
@@ -214,8 +217,8 @@ final class CronMonitorClientLoggingTest extends TestCase
     public static function misplacedCredentials(): iterable
     {
         yield 'arguments swapped' => ['start', self::UUID];
-        yield 'a uuid as the action' => ['00000000-0000-4000-a000-000000000000', self::UUID];
-        yield 'a token as the action' => ['00000000-0000-4000-a000-000000000000', 'cmk_example_notarealtoken'];
+        yield 'a uuid as the action' => ['00000000-0000-0000-0000-000000000002', self::UUID];
+        yield 'a token as the action' => ['00000000-0000-0000-0000-000000000002', 'cmk_example_notarealtoken'];
     }
 
     #[DataProvider('misplacedCredentials')]
@@ -248,11 +251,11 @@ final class CronMonitorClientLoggingTest extends TestCase
         self::assertStringNotContainsStringIgnoringCase(self::UUID, $result->errorMessage);
     }
 
-    private static function assertRawUuidAbsent(InMemoryLogger $logger): void
+    private static function assertRawUuidAbsent(InMemoryLogger $logger, string $uuid = self::UUID): void
     {
         self::assertNotSame([], $logger->records);
         self::assertStringNotContainsStringIgnoringCase(
-            self::UUID,
+            $uuid,
             json_encode($logger->records, \JSON_THROW_ON_ERROR),
         );
     }

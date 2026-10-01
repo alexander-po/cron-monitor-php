@@ -19,12 +19,12 @@ final class ReconcileResult
     ) {
     }
 
-    public static function existing(ReconcilableJob $job, string $uuid): self
+    public static function existing(ReconcilableJob $job, #[\SensitiveParameter] string $uuid): self
     {
         return new self($job, ReconcileOutcome::Existing, uuid: $uuid);
     }
 
-    public static function created(ReconcilableJob $job, string $uuid): self
+    public static function created(ReconcilableJob $job, #[\SensitiveParameter] string $uuid): self
     {
         return new self($job, ReconcileOutcome::Created, uuid: $uuid);
     }
@@ -42,5 +42,21 @@ final class ReconcileResult
     public static function conflict(ReconcilableJob $job, string $error): self
     {
         return new self($job, ReconcileOutcome::Conflict, error: $error);
+    }
+
+    /**
+     * `print_r()` and `var_dump()` show the UUID the way PHP shows a
+     * `#[\SensitiveParameter]` argument: a result is held by the frames that
+     * report the sync, and a monitor UUID is the write credential of its
+     * monitor.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['uuid'] = new \SensitiveParameterValue($this->uuid);
+
+        return $properties;
     }
 }

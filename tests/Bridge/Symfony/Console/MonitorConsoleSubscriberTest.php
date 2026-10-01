@@ -34,7 +34,7 @@ final class MonitorConsoleSubscriberTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const UUID = '33333333-3333-4333-8333-333333333333';
+    private const UUID = '00000000-0000-0000-0000-000000000001';
 
     public function test_a_failed_ping_keeps_a_mapped_uuid_out_of_the_frames_a_logger_records(): void
     {
@@ -337,7 +337,7 @@ final class MonitorConsoleSubscriberTest extends TestCase
         // Explicit YAML wins over the attribute. Use case: an attribute on
         // the class declares the prod UUID, but per-env YAML overrides it
         // (e.g. a different cronheart project for staging).
-        $stagingUuid = '99999999-9999-4999-8999-999999999999';
+        $stagingUuid = '00000000-0000-0000-0000-000000000002';
         $http = new RecordingHttpClient([new Response(200), new Response(200)]);
         $subscriber = $this->buildSubscriber($http, [
             'app:via-attribute' => $stagingUuid,
@@ -443,7 +443,7 @@ final class MonitorConsoleSubscriberTest extends TestCase
         // in git. `#[Monitor(uuid: getenv(...))]` is a PHP parse error
         // (attribute args must be compile-time constant), so we carry
         // the env-var *name* on the class and resolve at runtime.
-        $envUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $envUuid = '00000000-0000-0000-0000-000000000003';
         $_ENV[EnvMonitoredAttributedCommand::ENV_VAR] = $envUuid;
 
         try {

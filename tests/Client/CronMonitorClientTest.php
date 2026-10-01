@@ -18,7 +18,7 @@ use Psr\Http\Message\RequestInterface;
 
 final class CronMonitorClientTest extends TestCase
 {
-    private const UUID = '11111111-1111-4111-8111-111111111111';
+    private const UUID = '00000000-0000-0000-0000-000000000001';
 
     public function test_heartbeat_posts_to_canonical_url_and_returns_delivered_result(): void
     {
@@ -245,7 +245,7 @@ final class CronMonitorClientTest extends TestCase
             $logger,
         );
 
-        $result = $client->ping('00000000-0000-4000-a000-000000000000', $action, null);
+        $result = $client->ping('00000000-0000-0000-0000-000000000002', $action, null);
 
         self::assertSame([], $http->requests);
         self::assertFalse($result->delivered);

@@ -17,7 +17,7 @@ use PHPUnit\Framework\TestCase;
 
 final class IdempotencyKeyApiTest extends TestCase
 {
-    private const UUID = '550e8400-e29b-41d4-a716-446655440000';
+    private const UUID = '00000000-0000-0000-0000-000000000000';
 
     private function client(RecordingHttpClient $http, int $retries = 3): MonitorApiClient
     {

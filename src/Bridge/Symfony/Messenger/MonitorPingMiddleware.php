@@ -29,6 +29,8 @@ use Symfony\Component\Messenger\Stamp\ReceivedStamp;
  */
 final class MonitorPingMiddleware implements MiddlewareInterface
 {
+    private readonly LoggerInterface $logger;
+
     /**
      * @param array<class-string, string> $monitorMap message FQCN => monitor UUID
      */
@@ -36,8 +38,9 @@ final class MonitorPingMiddleware implements MiddlewareInterface
         private readonly CronMonitorClient $client,
         #[\SensitiveParameter]
         private readonly array $monitorMap,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public function handle(Envelope $envelope, StackInterface $stack): Envelope

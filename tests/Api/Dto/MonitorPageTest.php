@@ -38,8 +38,8 @@ final class MonitorPageTest extends TestCase
     {
         $page = MonitorPage::fromArray([
             'data' => [
-                self::monitorRow('11111111-1111-4111-8111-111111111111'),
-                self::monitorRow('22222222-2222-4222-8222-222222222222'),
+                self::monitorRow('00000000-0000-0000-0000-000000000001'),
+                self::monitorRow('00000000-0000-0000-0000-000000000002'),
             ],
             'total' => 5,
             'limit' => 2,
@@ -56,7 +56,7 @@ final class MonitorPageTest extends TestCase
     public function test_has_more_is_true_when_offset_plus_count_below_total(): void
     {
         $page = MonitorPage::fromArray([
-            'data' => [self::monitorRow('11111111-1111-4111-8111-111111111111')],
+            'data' => [self::monitorRow('00000000-0000-0000-0000-000000000001')],
             'total' => 3,
             'limit' => 1,
             'offset' => 0,
@@ -68,7 +68,7 @@ final class MonitorPageTest extends TestCase
     public function test_has_more_is_false_on_last_page(): void
     {
         $page = MonitorPage::fromArray([
-            'data' => [self::monitorRow('33333333-3333-4333-8333-333333333333')],
+            'data' => [self::monitorRow('00000000-0000-0000-0000-000000000003')],
             'total' => 3,
             'limit' => 1,
             'offset' => 2,
@@ -85,8 +85,8 @@ final class MonitorPageTest extends TestCase
 
     public function test_a_malformed_page_keeps_the_monitor_uuids_out_of_trace_arguments(): void
     {
-        $listed = '11111111-1111-4111-8111-111111111111';
-        $broken = '22222222-2222-4222-8222-222222222222';
+        $listed = '00000000-0000-0000-0000-000000000001';
+        $broken = '00000000-0000-0000-0000-000000000002';
         $envelope = ['total' => 2, 'limit' => 2, 'offset' => 0];
 
         $malformed = [

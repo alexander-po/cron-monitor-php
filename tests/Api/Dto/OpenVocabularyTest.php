@@ -144,7 +144,7 @@ final class OpenVocabularyTest extends TestCase
     private static function monitorRow(array $overrides = []): array
     {
         return array_merge([
-            'uuid' => '550e8400-e29b-41d4-a716-446655440000',
+            'uuid' => '00000000-0000-0000-0000-000000000000',
             'name' => 'Nightly report',
             'schedule_kind' => 'cron',
             'schedule_expr' => '0 2 * * *',
@@ -154,8 +154,8 @@ final class OpenVocabularyTest extends TestCase
             'next_expected_at' => null,
             'last_ping_at' => null,
             'created_at' => '2026-01-01T00:00:00+00:00',
-            'ping_url' => 'https://cronheart.com/ping/550e8400-e29b-41d4-a716-446655440000',
-            'badge_url' => 'https://cronheart.com/badge/550e8400-e29b-41d4-a716-446655440000.svg',
+            'ping_url' => 'https://cronheart.com/ping/00000000-0000-0000-0000-000000000000',
+            'badge_url' => 'https://cronheart.com/badge/00000000-0000-0000-0000-000000000000.svg',
         ], $overrides);
     }
 }

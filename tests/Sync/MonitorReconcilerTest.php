@@ -78,7 +78,7 @@ final class MonitorReconcilerTest extends TestCase
 
     public function test_dry_run_creates_nothing_and_classifies_each_job(): void
     {
-        $http = new RecordingHttpClient([self::listPage([['name' => 'App\\Cron\\Daily', 'uuid' => '11111111-1111-4111-8111-111111111111']])]);
+        $http = new RecordingHttpClient([self::listPage([['name' => 'App\\Cron\\Daily', 'uuid' => '00000000-0000-0000-0000-000000000001']])]);
         $reconciler = $this->reconciler($http);
 
         $results = $reconciler->reconcile([
@@ -87,7 +87,7 @@ final class MonitorReconcilerTest extends TestCase
         ], apply: false);
 
         self::assertSame(ReconcileOutcome::Existing, $results[0]->outcome);
-        self::assertSame('11111111-1111-4111-8111-111111111111', $results[0]->uuid);
+        self::assertSame('00000000-0000-0000-0000-000000000001', $results[0]->uuid);
         self::assertSame(ReconcileOutcome::WouldCreate, $results[1]->outcome);
         self::assertNull($results[1]->uuid);
 
@@ -97,9 +97,9 @@ final class MonitorReconcilerTest extends TestCase
 
     public function test_apply_creates_only_the_missing_job(): void
     {
-        $newUuid = '22222222-2222-4222-8222-222222222222';
+        $newUuid = '00000000-0000-0000-0000-000000000002';
         $http = new RecordingHttpClient([
-            self::listPage([['name' => 'App\\Cron\\Daily', 'uuid' => '11111111-1111-4111-8111-111111111111']]),
+            self::listPage([['name' => 'App\\Cron\\Daily', 'uuid' => '00000000-0000-0000-0000-000000000001']]),
             self::createdMonitor('App\\Cron\\Hourly', $newUuid),
         ]);
         $reconciler = $this->reconciler($http);
@@ -130,7 +130,7 @@ final class MonitorReconcilerTest extends TestCase
     {
         $http = new RecordingHttpClient([
             self::listPage([]),
-            self::createdMonitor('App\\Cron\\Hourly', '22222222-2222-4222-8222-222222222222'),
+            self::createdMonitor('App\\Cron\\Hourly', '00000000-0000-0000-0000-000000000002'),
         ]);
         $reconciler = $this->reconciler($http);
 
@@ -144,7 +144,7 @@ final class MonitorReconcilerTest extends TestCase
     {
         $http = new RecordingHttpClient([
             self::listPage([]),
-            self::createdMonitor('App\\Cron\\Hourly', '22222222-2222-4222-8222-222222222222'),
+            self::createdMonitor('App\\Cron\\Hourly', '00000000-0000-0000-0000-000000000002'),
         ]);
         $reconciler = $this->reconciler($http);
 
@@ -176,7 +176,7 @@ final class MonitorReconcilerTest extends TestCase
     {
         $http = new RecordingHttpClient([
             self::listPage([]),
-            self::createdMonitor('App\\Cron\\Hourly', '22222222-2222-4222-8222-222222222222'),
+            self::createdMonitor('App\\Cron\\Hourly', '00000000-0000-0000-0000-000000000002'),
         ]);
         $reconciler = $this->reconciler($http);
 
@@ -191,7 +191,7 @@ final class MonitorReconcilerTest extends TestCase
         $http = new RecordingHttpClient([
             self::listPage([]),
             self::json(422, ['detail' => 'invalid cron', 'errors' => ['schedule_expr' => 'bad']]),
-            self::createdMonitor('App\\Cron\\Ok', '33333333-3333-4333-8333-333333333333'),
+            self::createdMonitor('App\\Cron\\Ok', '00000000-0000-0000-0000-000000000003'),
         ]);
         $reconciler = $this->reconciler($http);
 

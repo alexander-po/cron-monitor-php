@@ -275,14 +275,14 @@ vendor/bin/cron-monitor heartbeat "$CRON_MONITOR_REPORTS_NIGHTLY_UUID"
 
 Expect `ok heartbeat status=200 attempts=1` and exit code 0. Exit 2 with `ping failed:` means the endpoint did not accept the ping (unreachable host, TLS, a UUID the account does not own or one that was rotated). Exit 64 is a usage or configuration error, such as an `http://` endpoint without `--allow-insecure`.
 
-7b. Wiring, the way production runs the job:
+7b. Wiring, the way production runs the job. Note the time first (`date -u +%FT%TZ`): 7a's heartbeat has already set a last ping, so 7c tells a ping from this run apart by its time, allowing a few seconds for the difference between this clock and the server's.
 
 - Symfony console command: `php bin/console app:reports:nightly`; the subscriber pings `start`, then `success` or `fail`.
 - Symfony Scheduler: `php bin/console messenger:consume scheduler_<name> --limit=1 -vv` waits for the next trigger (`debug:scheduler` shows when), handles one message and exits.
 - Laravel scheduler: `php artisan schedule:test --name="reports:nightly"` runs that event with its callbacks, so the pings fire without waiting for the schedule.
 - Laravel queued job: dispatch it, then `php artisan queue:work --once`.
 
-7c. Confirm on the server. The dashboard shows the monitor with a last ping and status `up`, or from PHP:
+7c. Confirm on the server that the 7b run pinged. The dashboard shows the monitor's last ping and status, or from PHP:
 
 ```php
 use CronMonitor\Api\Dto\Vocabulary;
@@ -291,7 +291,11 @@ $monitor = $api->getMonitor((string) getenv('CRON_MONITOR_REPORTS_NIGHTLY_UUID')
 printf("%s %s\n", Vocabulary::value($monitor->status), $monitor->lastPingAt?->format('c') ?? 'never');
 ```
 
-`up` with a timestamp: done. `new` and `never`: no ping arrived; compare the variable name in the map with the environment, check the middleware is on the bus (4a-2) and that the Laravel run went through the scheduler (4b). `late` and `never`: the same checks, and the first deadline plus grace has already passed, so the monitor has raised a `late` alert to its attached, verified channels; the next `success` or heartbeat ping closes that incident. `late` with a timestamp: the monitor's schedule or grace does not match how often the job runs. `down`: the last run reported a failure: a `fail` ping, which the bridges send for a thrown error, a non-zero exit or a stopping signal, or a non-zero exit-code ping; the dashboard shows the body it sent. `paused`: paused in the dashboard.
+Read `paused` first. Otherwise compare the last ping with the time noted in 7b before reading the status, because a monitor that existed before this change can show any status with an old timestamp (a resumed one reads `new` with the last ping from before its pause).
+
+- `paused`: paused in the dashboard. A ping does not update a paused monitor's last ping, so it says nothing about 7b; resume the monitor and repeat 7b.
+- Last ping at or after the 7b time: the wiring works. While the job still runs only its `start` has arrived, and so has it alone when the job died without reporting (a fatal error, out of memory, `kill -9`): a `start` turns a `new` monitor `up` and leaves any other status as it was, so read the status once the job has finished and, if it did not exit normally, check the ping history in the dashboard or with `listPings()`. `up`: done. `down`: the run reported a failure: a `fail` ping, which the bridges send for a thrown error, a non-zero exit or a stopping signal, or a non-zero exit-code ping; the dashboard shows the body it sent.
+- Last ping before the 7b time, or `never`: the 7b run sent nothing, whatever the status. Compare the variable name in the map with the environment, check the middleware is on the bus (4a-2) and that the Laravel run went through the scheduler (4b). With `late`, a deadline plus grace has passed without a ping, so the monitor has raised a `late` alert to its attached, verified channels unless an incident was already open or the monitor is snoozed; the next `success` or heartbeat ping closes it.
 
 ## Step 8: what the exceptions mean
 

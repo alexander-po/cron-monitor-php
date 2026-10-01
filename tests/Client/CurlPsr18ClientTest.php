@@ -20,7 +20,7 @@ final class CurlPsr18ClientTest extends TestCase
 
     private const TOKEN = 'cmk_Hd5Wq2Ys8Ka3Pe7Tn4Gv';
 
-    private const UUID = '3c7e9b12-5d4f-4a86-b0e3-8f1a6c2d9e47';
+    private const UUID = '00000000-0000-0000-0000-000000000000';
 
     private static ?LocalHttpServer $server = null;
 

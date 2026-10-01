@@ -21,7 +21,7 @@ final class MonitorQueueJobTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const UUID = '44444444-4444-4444-8444-444444444444';
+    private const UUID = '00000000-0000-0000-0000-000000000000';
 
     protected function tearDown(): void
     {

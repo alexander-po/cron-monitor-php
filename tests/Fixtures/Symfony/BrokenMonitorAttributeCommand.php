@@ -21,7 +21,7 @@ use Symfony\Component\Console\Command\Command;
  * The intent is obvious in code review, but at runtime the SDK has
  * to handle it gracefully.
  */
-#[Monitor(uuid: '99999999-9999-4999-8999-999999999999', env: 'CRON_MONITOR_BOTH_SET_FIXTURE')]
+#[Monitor(uuid: '00000000-0000-0000-0000-000000000002', env: 'CRON_MONITOR_BOTH_SET_FIXTURE')]
 final class BrokenMonitorAttributeCommand extends Command
 {
 }

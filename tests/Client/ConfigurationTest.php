@@ -8,6 +8,7 @@ use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
+use CronMonitor\Tests\Support\UuidPlaceholder;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -17,7 +18,7 @@ final class ConfigurationTest extends TestCase
     use SecretTraceAssertions;
 
     private const API_KEY = 'cmk_Qx7Tr4Lm9Vb2Nc6Hp1Zw';
-    private const UUID = '0e9a3f5c-7b21-4d8e-9c6a-2f4b8d1e7a35';
+    private const UUID = '00000000-0000-0000-0000-000000000001';
 
     public function test_default_endpoint_is_https_and_pointed_at_saas(): void
     {
@@ -89,9 +90,18 @@ final class ConfigurationTest extends TestCase
     {
         $config = new Configuration('https://cronheart.com/');
         self::assertSame(
-            'https://cronheart.com/ping/00000000-0000-4000-a000-000000000000',
-            $config->pingUrl('00000000-0000-4000-a000-000000000000'),
+            'https://cronheart.com/ping/00000000-0000-0000-0000-000000000002',
+            $config->pingUrl('00000000-0000-0000-0000-000000000002'),
         );
+    }
+
+    public function test_ping_url_accepts_a_uuid_with_hex_letters_in_either_case(): void
+    {
+        $config = new Configuration('https://cronheart.com');
+        $uuid = UuidPlaceholder::withHexLetters(self::UUID);
+
+        self::assertSame('https://cronheart.com/ping/'.$uuid, $config->pingUrl($uuid));
+        self::assertSame('https://cronheart.com/ping/'.$uuid, strtolower($config->pingUrl(strtoupper($uuid))));
     }
 
     public function test_ping_url_rejects_invalid_uuid(): void
@@ -107,7 +117,7 @@ final class ConfigurationTest extends TestCase
         $config = new Configuration('https://cronheart.com');
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('not a valid cron-monitor UUID');
-        $config->pingUrl("00000000-0000-4000-a000-000000000000\n");
+        $config->pingUrl("00000000-0000-0000-0000-000000000002\n");
     }
 
     public function test_ping_url_rejects_dangerous_action_segment(): void
@@ -116,7 +126,7 @@ final class ConfigurationTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('The ping action is not valid');
         // Path traversal attempt — must be rejected before being concatenated.
-        $config->pingUrl('00000000-0000-4000-a000-000000000000', '../admin');
+        $config->pingUrl('00000000-0000-0000-0000-000000000002', '../admin');
     }
 
     /**
@@ -138,8 +148,8 @@ final class ConfigurationTest extends TestCase
         $config = new Configuration('https://cronheart.com');
 
         self::assertSame(
-            'https://cronheart.com/ping/00000000-0000-4000-a000-000000000000/'.$action,
-            $config->pingUrl('00000000-0000-4000-a000-000000000000', $action),
+            'https://cronheart.com/ping/00000000-0000-0000-0000-000000000002/'.$action,
+            $config->pingUrl('00000000-0000-0000-0000-000000000002', $action),
         );
     }
 
@@ -165,7 +175,7 @@ final class ConfigurationTest extends TestCase
         $config = new Configuration('https://cronheart.com');
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('The ping action is not valid');
-        $config->pingUrl('00000000-0000-4000-a000-000000000000', $action);
+        $config->pingUrl('00000000-0000-0000-0000-000000000002', $action);
     }
 
     public function test_a_rejected_ping_action_is_not_echoed(): void
@@ -173,7 +183,7 @@ final class ConfigurationTest extends TestCase
         $config = new Configuration('https://cronheart.com');
 
         try {
-            $config->pingUrl('00000000-0000-4000-a000-000000000000', self::UUID);
+            $config->pingUrl('00000000-0000-0000-0000-000000000002', self::UUID);
             self::fail('Expected an InvalidArgumentException.');
         } catch (\InvalidArgumentException $e) {
             self::assertSame('The ping action is not valid (expected run, start, success, ok or fail, case-insensitive, or 1 to 16 digits such as an exit code).', $e->getMessage());

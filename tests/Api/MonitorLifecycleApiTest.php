@@ -14,13 +14,14 @@ use CronMonitor\Api\Exception\ValidationException;
 use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\UuidPlaceholder;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 final class MonitorLifecycleApiTest extends TestCase
 {
-    private const UUID = '550e8400-e29b-41d4-a716-446655440000';
+    private const UUID = '00000000-0000-0000-0000-000000000001';
 
     private function client(RecordingHttpClient $http, int $retries = 0): MonitorApiClient
     {
@@ -261,7 +262,7 @@ final class MonitorLifecycleApiTest extends TestCase
 
     public function test_rotate_monitor_uuid_confirms_with_current_uuid(): void
     {
-        $newUuid = '11111111-1111-4111-8111-111111111111';
+        $newUuid = '00000000-0000-0000-0000-000000000002';
         $http = new RecordingHttpClient([self::jsonResponse(200, self::monitorRow(['uuid' => $newUuid]))]);
         $client = $this->client($http);
 
@@ -282,9 +283,11 @@ final class MonitorLifecycleApiTest extends TestCase
         $http = new RecordingHttpClient([self::jsonResponse(200, self::monitorRow())]);
         $client = $this->client($http);
 
-        $client->rotateMonitorUuid(strtoupper(self::UUID));
+        $withHexLetters = UuidPlaceholder::withHexLetters(self::UUID);
 
-        self::assertSame(['confirm' => self::UUID], json_decode((string) $http->requests[0]->getBody(), true));
+        $client->rotateMonitorUuid(strtoupper($withHexLetters));
+
+        self::assertSame(['confirm' => $withHexLetters], json_decode((string) $http->requests[0]->getBody(), true));
     }
 
     public function test_rotate_monitor_uuid_is_not_retried_on_server_error(): void

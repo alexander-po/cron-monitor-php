@@ -44,13 +44,16 @@ final class CronMonitorClient
 
     private const API_KEY_PATTERN = 'cmk_[A-Za-z0-9_-]+';
 
+    private readonly LoggerInterface $logger;
+
     public function __construct(
         private readonly Configuration $configuration,
         private readonly ClientInterface $httpClient,
         private readonly RequestFactoryInterface $requestFactory,
         private readonly StreamFactoryInterface $streamFactory,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     /**
@@ -75,7 +78,7 @@ final class CronMonitorClient
             new CurlPsr18Client($factory, $factory, $configuration->timeoutSeconds),
             $factory,
             $factory,
-            $logger ?? new NullLogger(),
+            $logger,
         );
     }
 

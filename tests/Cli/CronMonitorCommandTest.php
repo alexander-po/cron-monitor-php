@@ -20,7 +20,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class CronMonitorCommandTest extends TestCase
 {
-    private const UUID = '11111111-1111-4111-8111-111111111111';
+    private const UUID = '00000000-0000-0000-0000-000000000000';
 
     private ?string $installRoot = null;
 
@@ -90,10 +90,7 @@ final class CronMonitorCommandTest extends TestCase
             self::markTestSkipped('proc_open is disabled in this environment.');
         }
 
-        $environment = getenv();
-        unset($environment['CRON_MONITOR_ENDPOINT']);
-
-        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, \dirname(__DIR__, 2).'/bin/cron-monitor', 'signup', 'you@example.com'], $environment);
+        [$status, $stdout, $stderr] = self::execute([\PHP_BINARY, \dirname(__DIR__, 2).'/bin/cron-monitor', 'signup', 'you@example.com']);
 
         self::assertSame(64, $status);
         self::assertSame('', $stdout);
@@ -276,13 +273,17 @@ final class CronMonitorCommandTest extends TestCase
     }
 
     /**
-     * @param list<string>               $command
-     * @param array<string, string>|null $environment null inherits this process's environment
+     * The CLI reads its defaults from `CRON_MONITOR_*` variables, so the child
+     * gets this process's environment without them: a key or endpoint the
+     * developer exported must not decide what a test sees.
+     *
+     * @param list<string> $command
      *
      * @return array{int, string, string}
      */
-    private static function execute(array $command, ?array $environment = null): array
+    private static function execute(array $command): array
     {
+        $environment = array_filter(getenv(), static fn (string $name): bool => !str_starts_with($name, 'CRON_MONITOR_'), \ARRAY_FILTER_USE_KEY);
         $pipes = [];
         $process = proc_open(
             $command,

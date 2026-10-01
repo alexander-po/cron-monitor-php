@@ -11,7 +11,7 @@ namespace CronMonitor\Attribute;
  *
  * Two construction forms:
  *
- *     #[Monitor(uuid: '550e8400-e29b-41d4-a716-446655440000')]
+ *     #[Monitor(uuid: '00000000-0000-0000-0000-000000000000')]
  *
  *     #[Monitor(env: 'CRON_MONITOR_REPORTS_NIGHTLY_UUID')]
  *
@@ -48,6 +48,7 @@ namespace CronMonitor\Attribute;
 final class Monitor
 {
     public function __construct(
+        #[\SensitiveParameter]
         public readonly ?string $uuid = null,
         public readonly ?string $env = null,
     ) {

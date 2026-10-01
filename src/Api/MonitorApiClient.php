@@ -78,13 +78,16 @@ final class MonitorApiClient
      */
     private const MAX_PAGES = 10000;
 
+    private readonly LoggerInterface $logger;
+
     public function __construct(
         private readonly Configuration $configuration,
         private readonly ClientInterface $httpClient,
         private readonly RequestFactoryInterface $requestFactory,
         private readonly StreamFactoryInterface $streamFactory,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     /**
@@ -111,7 +114,7 @@ final class MonitorApiClient
             new CurlPsr18Client($factory, $factory, $configuration->timeoutSeconds),
             $factory,
             $factory,
-            $logger ?? new NullLogger(),
+            $logger,
         );
     }
 

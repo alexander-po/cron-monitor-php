@@ -145,7 +145,7 @@ final class AttributeResolverTest extends TestCase
         // UUID is a write capability secret that should live in env, not
         // in git. The resolver must walk the same env-lookup ladder as
         // the attribute's own `resolveUuid()` method.
-        $envUuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $envUuid = '00000000-0000-0000-0000-000000000000';
         $_ENV[EnvMonitoredScheduledCommand::ENV_VAR] = $envUuid;
 
         try {

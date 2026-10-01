@@ -76,7 +76,7 @@ return static function (ContainerConfigurator $container): void {
             service(ClientInterface::class),
             service(RequestFactoryInterface::class),
             service(StreamFactoryInterface::class),
-            service(LoggerInterface::class)->ignoreOnInvalid(),
+            service(LoggerInterface::class)->nullOnInvalid(),
         ])
         ->public(); // public so user code can grab it via `$container->get(...)`
 
@@ -91,7 +91,7 @@ return static function (ContainerConfigurator $container): void {
             service(ClientInterface::class),
             service(RequestFactoryInterface::class),
             service(StreamFactoryInterface::class),
-            service(LoggerInterface::class)->ignoreOnInvalid(),
+            service(LoggerInterface::class)->nullOnInvalid(),
         ])
         ->public();
 
@@ -99,7 +99,7 @@ return static function (ContainerConfigurator $container): void {
         ->args([
             service(CronMonitorClient::class),
             [], // overridden by CronMonitorExtension::load (positional arg #2)
-            service(LoggerInterface::class)->ignoreOnInvalid(),
+            service(LoggerInterface::class)->nullOnInvalid(),
         ]);
 
     // Console subscriber wraps `bin/console <name>` invocations whose command
@@ -110,7 +110,7 @@ return static function (ContainerConfigurator $container): void {
         ->args([
             service(CronMonitorClient::class),
             [], // overridden by CronMonitorExtension::load
-            service(LoggerInterface::class)->ignoreOnInvalid(),
+            service(LoggerInterface::class)->nullOnInvalid(),
         ])
         ->tag('kernel.event_subscriber');
 
