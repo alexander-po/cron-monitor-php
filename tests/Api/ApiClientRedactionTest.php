@@ -16,6 +16,7 @@ use CronMonitor\Tests\Support\SecretTraceAssertions;
 use CronMonitor\Tests\Support\UuidPlaceholder;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -35,7 +36,7 @@ final class ApiClientRedactionTest extends TestCase
 
     private const ROTATED_UUID = '00000000-0000-0000-0000-000000000002';
 
-    private const API_KEY = 'cmk_Vz3Hq8Jw1Mt6Rk4Ny9Bs';
+    private const API_KEY = 'cmk_fake_redaction_test_key';
 
     public function test_transport_failure_names_the_route_not_the_monitor_uuid(): void
     {
@@ -50,35 +51,46 @@ final class ApiClientRedactionTest extends TestCase
         }
     }
 
-    public function test_transport_failure_redacts_a_uuid_quoted_by_the_underlying_client(): void
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function uuidSpellings(): iterable
+    {
+        yield 'lower case' => [self::uuid()];
+        yield 'upper case' => [strtoupper(self::uuid())];
+    }
+
+    #[DataProvider('uuidSpellings')]
+    public function test_transport_failure_redacts_a_uuid_quoted_by_the_underlying_client(string $uuid): void
     {
         // Guzzle appends the failing request URI to its connection errors.
         $client = $this->clientThatFailsWith(
-            'cURL error 7: Failed to connect for https://cronheart.com/api/v1/monitors/'.self::uuid(),
+            'cURL error 7: Failed to connect for https://cronheart.com/api/v1/monitors/'.$uuid,
         );
 
         try {
-            $client->getMonitor(self::uuid());
+            $client->getMonitor($uuid);
             self::fail('Expected an ApiTransportException.');
         } catch (ApiTransportException $e) {
-            self::assertStringNotContainsStringIgnoringCase(self::uuid(), $e->getMessage());
+            self::assertStringNotContainsStringIgnoringCase($uuid, $e->getMessage());
         }
     }
 
-    public function test_transport_failure_log_carries_the_route_not_the_monitor_uuid(): void
+    #[DataProvider('uuidSpellings')]
+    public function test_transport_failure_log_carries_the_route_not_the_monitor_uuid(string $uuid): void
     {
         $logger = new InMemoryLogger();
         $client = $this->clientThatFailsWith('connection refused', $logger);
 
         try {
-            $client->deleteMonitor(self::uuid());
+            $client->deleteMonitor($uuid);
         } catch (ApiTransportException) {
         }
 
         self::assertNotSame([], $logger->records);
         self::assertSame('/api/v1/monitors/{uuid}', $logger->records[0]['context']['route'] ?? null);
         self::assertStringNotContainsStringIgnoringCase(
-            self::uuid(),
+            $uuid,
             json_encode($logger->records, \JSON_THROW_ON_ERROR),
         );
     }

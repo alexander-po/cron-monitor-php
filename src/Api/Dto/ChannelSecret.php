@@ -36,4 +36,18 @@ final class ChannelSecret
             Hydrator::string($data, 'secret'),
         );
     }
+
+    /**
+     * `print_r()` and `var_dump()` show the secret the way PHP shows a
+     * `#[\SensitiveParameter]` argument: whoever holds it can sign a delivery.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['secret'] = new \SensitiveParameterValue($this->secret);
+
+        return $properties;
+    }
 }

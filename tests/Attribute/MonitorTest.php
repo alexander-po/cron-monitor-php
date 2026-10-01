@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace CronMonitor\Tests\Attribute;
 
 use CronMonitor\Attribute\Monitor;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class MonitorTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
     private const TEST_ENV_VAR = 'CRON_MONITOR_TEST_UUID_FOR_MONITOR_TEST';
@@ -136,5 +138,13 @@ final class MonitorTest extends TestCase
         $monitor = new Monitor(env: self::TEST_ENV_VAR);
 
         self::assertNull($monitor->resolveUuid());
+    }
+
+    public function test_a_dumped_attribute_masks_the_uuid_and_the_property_still_carries_it(): void
+    {
+        $monitor = new Monitor(uuid: self::TEST_UUID);
+
+        self::assertDumpsMask($monitor, [self::TEST_UUID], ['uuid']);
+        self::assertSame(self::TEST_UUID, $monitor->uuid);
     }
 }

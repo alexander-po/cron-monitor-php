@@ -17,7 +17,7 @@ final class ConfigurationTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const API_KEY = 'cmk_Qx7Tr4Lm9Vb2Nc6Hp1Zw';
+    private const API_KEY = 'cmk_fake_configuration_test_key';
     private const UUID = '00000000-0000-0000-0000-000000000001';
 
     public function test_default_endpoint_is_https_and_pointed_at_saas(): void

@@ -8,6 +8,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.5.5] — 2026-10-01
+
+A patch: `print_r()` and `var_dump()` mask the credentials the SDK's DTOs and the `#[Monitor]` attribute hold, as they already do for `Configuration`, `ReconcileResult` and the framework bridges: a `Monitor` its UUID and the ping and badge URLs built from it, a `SignupToken` its API token, a `SignupStarted` its device code, a `ChannelSecret` its signing secret, a `CreateChannelRequest` its webhook URL and signing secret, and the attribute its UUID. The wire mapping is untouched.
+
+Also in this release: the tests that talk to a loopback HTTP server pass with a proxy exported (`phpunit.dist.xml` sets `no_proxy` to `127.0.0.1`, and CI runs PHPUnit with a proxy set to keep it so), the redaction tests cover a monitor UUID spelled in upper case, the API keys, webhook secrets, webhook URLs and device codes in the tests read as obvious fakes and the one email address outside `example.*` moved to `example.com`, and CI pins `actions/checkout`, `shivammathur/setup-php` and `actions/cache` to commit SHAs.
+
+### Security
+
+- **`print_r()` and `var_dump()` no longer show the credential a DTO or the `#[Monitor]` attribute holds.** A `Monitor` read from the management API carries its UUID, the write credential of its ping endpoint, in `uuid` and in the `pingUrl` and `badgeUrl` built from it; `SignupToken::$token` is an API key for the whole account, and whoever holds `SignupStarted::$deviceCode` can claim it; the `$secret` of a `ChannelSecret` or a `CreateChannelRequest` signs webhook deliveries, and a `CreateChannelRequest`'s `$webhookUrl` lets its holder post to the channel; the attribute's `$uuid` is a monitor UUID. A dump into a debug log or an error page printed them. Each class now has a `__debugInfo()` that shows these properties the way PHP shows a `#[\SensitiveParameter]` argument; the properties still return them. `var_export()`, `json_encode()` (and with it a logger that JSON-encodes the objects in its context), `serialize()` and Symfony's VarDumper read the public properties and still show them.
+
 ## [1.5.4] — 2026-09-30
 
 A patch: the Symfony bundle builds in a container that has no logger, the `#[Monitor]` attribute and the sync's `ReconcileResult` keep their monitor UUID out of stack-frame arguments, `print_r()` and `var_dump()` of a `ReconcileResult` mask it, and step 7c of the agent recipe tells a ping from the framework run apart from the CLI heartbeat of step 7a. The wire mapping is untouched.

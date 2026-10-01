@@ -173,11 +173,20 @@ final class CronMonitorClientLoggingTest extends TestCase
         self::assertRawUuidAbsent($logger);
     }
 
-    public function test_transport_error_quoting_the_ping_url_is_scrubbed(): void
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function uuidSpellings(): iterable
+    {
+        yield 'lower case' => [UuidPlaceholder::withHexLetters(self::UUID)];
+        yield 'upper case' => [strtoupper(UuidPlaceholder::withHexLetters(self::UUID))];
+    }
+
+    #[DataProvider('uuidSpellings')]
+    public function test_transport_error_quoting_the_ping_url_is_scrubbed(string $uuid): void
     {
         // Guzzle appends the full request URI to its connection errors, and
         // for a ping that URI *is* the credential.
-        $uuid = UuidPlaceholder::withHexLetters(self::UUID);
         $quoted = $this->transportError(
             'cURL error 7: Failed to connect for https://cronheart.com/ping/'.$uuid.'/success',
         );

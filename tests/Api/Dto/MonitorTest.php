@@ -9,11 +9,13 @@ use CronMonitor\Api\Dto\MonitorChannel;
 use CronMonitor\Api\Dto\MonitorStatus;
 use CronMonitor\Api\Dto\ScheduleKind;
 use CronMonitor\Api\Dto\UpdateMonitorRequest;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class MonitorTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
     /**
@@ -245,5 +247,16 @@ final class MonitorTest extends TestCase
 
             $this->assertSecretStaysOutOfTraces($uuid, static fn () => Monitor::fromArray($payload), \UnexpectedValueException::class);
         }
+    }
+
+    public function test_a_dumped_monitor_masks_its_uuid_and_urls_and_the_properties_still_carry_them(): void
+    {
+        $monitor = Monitor::fromArray(self::payload());
+        $uuid = '00000000-0000-0000-0000-000000000001';
+
+        self::assertDumpsMask($monitor, [$uuid], ['uuid', 'pingUrl', 'badgeUrl']);
+        self::assertSame($uuid, $monitor->uuid);
+        self::assertSame('https://cronheart.com/ping/'.$uuid, $monitor->pingUrl);
+        self::assertSame('https://cronheart.com/badge/'.$uuid.'.svg', $monitor->badgeUrl);
     }
 }

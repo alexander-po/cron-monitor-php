@@ -6,10 +6,13 @@ namespace CronMonitor\Tests\Api\Dto;
 
 use CronMonitor\Api\Dto\ChannelSecret;
 use CronMonitor\Api\Dto\TestChannelResult;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class ChannelMutationDtoTest extends TestCase
 {
+    use SecretDumpAssertions;
+
     /**
      * @return array<string, mixed>
      */
@@ -20,7 +23,7 @@ final class ChannelMutationDtoTest extends TestCase
             'kind' => 'webhook',
             'label' => 'Ops webhook',
             'verified' => true,
-            'config' => ['url' => 'https://hooks.example.test/x'],
+            'config' => ['url' => '***'],
             'created_at' => '2026-01-01T00:00:00+00:00',
         ];
     }
@@ -57,5 +60,13 @@ final class ChannelMutationDtoTest extends TestCase
     {
         $this->expectException(\UnexpectedValueException::class);
         TestChannelResult::fromArray(['delivered' => true, 'newly_verified' => false, 'channel' => 'nope']);
+    }
+
+    public function test_a_dumped_rotation_masks_the_secret_and_the_property_still_carries_it(): void
+    {
+        $result = ChannelSecret::fromArray(self::channelRow() + ['secret' => 'whsec_fake_dumped_secret']);
+
+        self::assertDumpsMask($result, ['whsec_fake_dumped_secret'], ['secret']);
+        self::assertSame('whsec_fake_dumped_secret', $result->secret);
     }
 }

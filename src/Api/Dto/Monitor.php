@@ -116,4 +116,21 @@ final class Monitor
 
         return $channels;
     }
+
+    /**
+     * `print_r()` and `var_dump()` show the UUID, and the ping and badge URLs
+     * that carry it, the way PHP shows a `#[\SensitiveParameter]` argument: a
+     * monitor UUID is the write credential of its monitor.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['uuid'] = new \SensitiveParameterValue($this->uuid);
+        $properties['pingUrl'] = new \SensitiveParameterValue($this->pingUrl);
+        $properties['badgeUrl'] = new \SensitiveParameterValue($this->badgeUrl);
+
+        return $properties;
+    }
 }

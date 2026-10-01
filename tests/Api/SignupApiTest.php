@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CronMonitor\Tests\Api;
 
+use CronMonitor\Api\Dto\SignupStarted;
+use CronMonitor\Api\Dto\SignupToken;
 use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Exception\ForbiddenException;
 use CronMonitor\Api\Exception\RateLimitException;
@@ -15,6 +17,7 @@ use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CurlException;
 use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
@@ -22,9 +25,10 @@ use PHPUnit\Framework\TestCase;
 
 final class SignupApiTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
-    private const DEVICE_CODE = 'dc_secret_value_4Qm9xT2vLr8Kp1Zs';
+    private const DEVICE_CODE = 'dc_fake_device_code_value';
 
     private function client(RecordingHttpClient $http, ?Configuration $configuration = null): MonitorApiClient
     {
@@ -337,7 +341,7 @@ final class SignupApiTest extends TestCase
 
     public function test_an_unreadable_confirmation_keeps_the_token_out_of_trace_arguments(): void
     {
-        $token = 'cmk_Zq8Wv3Tn6Yb1Xc4Ld7Mf0Ks2';
+        $token = 'cmk_fake_unreadable_confirmation';
         $http = new RecordingHttpClient([self::json(200, ['token' => $token, 'project' => ['not' => 'a string']])]);
 
         $e = $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE), ApiTransportException::class);
@@ -353,7 +357,7 @@ final class SignupApiTest extends TestCase
 
     public function test_a_confirmation_that_is_not_json_keeps_the_token_out_of_trace_arguments(): void
     {
-        $token = 'cmk_Rt5Yu8Io1Pa4Sd7Fg0Hj3Kl6';
+        $token = 'cmk_fake_not_json_confirmation';
         $http = new RecordingHttpClient([new Response(200, ['Content-Type' => 'application/json'], '{"token":"'.$token.'"}<br /><b>Notice</b>')]);
 
         $e = $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE), ApiTransportException::class);
@@ -362,7 +366,7 @@ final class SignupApiTest extends TestCase
 
     public function test_a_token_of_the_wrong_type_stays_out_of_trace_arguments(): void
     {
-        $token = 'cmk_Wq2Er5Ty8Ui1Op4As7Df0Gh3';
+        $token = 'cmk_fake_wrong_type_token';
         $http = new RecordingHttpClient([self::json(200, ['token' => ['value' => $token]])]);
 
         $this->assertSecretStaysOutOfTraces($token, fn () => $this->client($http)->pollSignupToken(self::DEVICE_CODE), ApiTransportException::class);
@@ -370,7 +374,7 @@ final class SignupApiTest extends TestCase
 
     public function test_an_unreadable_rotated_secret_stays_out_of_trace_arguments(): void
     {
-        $secret = 'whsec_Mn4Bv7Cx0Za3Lk6Jh9Gf2Ds5';
+        $secret = 'whsec_fake_unreadable_rotation';
         $http = new RecordingHttpClient([self::json(200, [
             'id' => '7',
             'kind' => 'webhook',
@@ -399,5 +403,21 @@ final class SignupApiTest extends TestCase
 
         self::assertSame('/api/v1/signup/token', $logger->records[0]['context']['route'] ?? null);
         self::assertStringNotContainsString(self::DEVICE_CODE, json_encode($logger->records, \JSON_THROW_ON_ERROR));
+    }
+
+    public function test_a_dumped_signup_start_masks_the_device_code_and_the_property_still_carries_it(): void
+    {
+        $started = new SignupStarted(self::DEVICE_CODE, 'BCDF-GHJK', 900, 5, null);
+
+        self::assertDumpsMask($started, [self::DEVICE_CODE], ['deviceCode']);
+        self::assertSame(self::DEVICE_CODE, $started->deviceCode);
+    }
+
+    public function test_a_dumped_signup_token_masks_the_token_and_the_property_still_carries_it(): void
+    {
+        $token = new SignupToken('cmk_fake_dumped_signup_token', 'cmk_fake', 'default');
+
+        self::assertDumpsMask($token, ['cmk_fake_dumped_signup_token'], ['token']);
+        self::assertSame('cmk_fake_dumped_signup_token', $token->token);
     }
 }
