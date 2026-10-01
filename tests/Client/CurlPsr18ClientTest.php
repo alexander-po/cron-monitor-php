@@ -18,7 +18,7 @@ final class CurlPsr18ClientTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const TOKEN = 'cmk_Hd5Wq2Ys8Ka3Pe7Tn4Gv';
+    private const TOKEN = 'cmk_fake_curl_test_token';
 
     private const UUID = '00000000-0000-0000-0000-000000000000';
 

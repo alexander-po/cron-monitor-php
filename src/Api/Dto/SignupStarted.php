@@ -41,4 +41,18 @@ final class SignupStarted
             Hydrator::nullableString($data, 'hint'),
         );
     }
+
+    /**
+     * `print_r()` and `var_dump()` show the device code the way PHP shows a
+     * `#[\SensitiveParameter]` argument.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['deviceCode'] = new \SensitiveParameterValue($this->deviceCode);
+
+        return $properties;
+    }
 }

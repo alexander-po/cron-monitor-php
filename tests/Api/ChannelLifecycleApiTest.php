@@ -29,9 +29,9 @@ final class ChannelLifecycleApiTest extends TestCase
 {
     use SecretTraceAssertions;
 
-    private const WEBHOOK_TOKEN = 'Xc9Vb2Nm5Qw8Er1Ty4Ui7';
+    private const WEBHOOK_TOKEN = 'fake-webhook-path-lifecycle';
     private const WEBHOOK_URL = 'https://hooks.example.test/deliver/'.self::WEBHOOK_TOKEN;
-    private const WEBHOOK_SECRET = 'signing-secret-Lp3Ko6Ji9Hu2Gy5Ft8Dr1';
+    private const WEBHOOK_SECRET = 'signing-secret-fake-lifecycle';
 
     private function client(ClientInterface $http, int $retries = 0): MonitorApiClient
     {

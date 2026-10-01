@@ -34,4 +34,18 @@ final class SignupToken
             Hydrator::nullableString($data, 'project'),
         );
     }
+
+    /**
+     * `print_r()` and `var_dump()` show the token the way PHP shows a
+     * `#[\SensitiveParameter]` argument: it authenticates the whole account.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['token'] = new \SensitiveParameterValue($this->token);
+
+        return $properties;
+    }
 }

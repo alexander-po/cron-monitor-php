@@ -15,9 +15,9 @@ use PHPUnit\Framework\TestCase;
 
 final class SignupCommandTest extends TestCase
 {
-    private const DEVICE_CODE = 'dc_secret_value_4Qm9xT2vLr8Kp1Zs';
+    private const DEVICE_CODE = 'dc_fake_device_code_value';
 
-    private const TOKEN = 'cmk_Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z-_0';
+    private const TOKEN = 'cmk_fake_SIGNUP_token_0123456789-_';
 
     /** @var resource */
     private $stdout;
@@ -82,7 +82,7 @@ final class SignupCommandTest extends TestCase
         return self::json(202, ['status' => 'authorization_pending']);
     }
 
-    private static function issued(string $token = self::TOKEN, string $prefix = 'cmk_Ab3d'): Response
+    private static function issued(string $token = self::TOKEN, string $prefix = 'cmk_fake'): Response
     {
         return self::json(200, ['token' => $token, 'token_prefix' => $prefix, 'project' => 'default']);
     }
@@ -265,7 +265,7 @@ final class SignupCommandTest extends TestCase
     {
         $http = new RecordingHttpClient([
             self::started(),
-            self::json(200, ['token_prefix' => 'cmk_Ab3d', 'project' => 'default']),
+            self::json(200, ['token_prefix' => 'cmk_fake', 'project' => 'default']),
             self::problem(410, 'Request gone.', 'expired_token'),
         ]);
 

@@ -96,4 +96,18 @@ final class Monitor
 
         return $value;
     }
+
+    /**
+     * `print_r()` and `var_dump()` show the UUID the way PHP shows a
+     * `#[\SensitiveParameter]` argument.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['uuid'] = new \SensitiveParameterValue($this->uuid);
+
+        return $properties;
+    }
 }

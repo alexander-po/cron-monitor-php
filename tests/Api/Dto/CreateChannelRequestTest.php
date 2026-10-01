@@ -6,15 +6,17 @@ namespace CronMonitor\Tests\Api\Dto;
 
 use CronMonitor\Api\Dto\ChannelKind;
 use CronMonitor\Api\Dto\CreateChannelRequest;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use PHPUnit\Framework\TestCase;
 
 final class CreateChannelRequestTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
-    private const WEBHOOK_URL = 'https://hooks.example.test/deliver/Hj2Kl5Zx8Cv1Bn4Mq7We0';
-    private const SECRET = 'signing-secret-Rt6Yu9Io2Pa5Sd8Fg1Hj4';
+    private const WEBHOOK_URL = 'https://hooks.example.test/deliver/fake-webhook-path-request';
+    private const SECRET = 'signing-secret-fake-request';
 
     public function test_email_named_constructor(): void
     {
@@ -100,5 +102,14 @@ final class CreateChannelRequestTest extends TestCase
                 $this->assertSecretStaysOutOfTraces($secret, $build, \InvalidArgumentException::class);
             }
         }
+    }
+
+    public function test_a_dumped_webhook_request_masks_the_url_and_the_secret_and_the_properties_still_carry_them(): void
+    {
+        $request = CreateChannelRequest::webhook('Ops webhook', self::WEBHOOK_URL, self::SECRET);
+
+        self::assertDumpsMask($request, [self::WEBHOOK_URL, self::SECRET], ['webhookUrl', 'secret']);
+        self::assertSame(self::WEBHOOK_URL, $request->webhookUrl);
+        self::assertSame(self::SECRET, $request->secret);
     }
 }

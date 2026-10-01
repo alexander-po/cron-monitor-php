@@ -33,7 +33,7 @@ final class ChannelTest extends TestCase
     {
         $page = ChannelPage::fromArray([
             'data' => [
-                ['id' => '1', 'kind' => 'email', 'label' => 'Me', 'verified' => false, 'config' => ['address' => 'a@b.test'], 'created_at' => '2026-01-01T00:00:00+00:00'],
+                ['id' => '1', 'kind' => 'email', 'label' => 'Me', 'verified' => false, 'config' => ['address' => 'me@example.com'], 'created_at' => '2026-01-01T00:00:00+00:00'],
                 ['id' => '2', 'kind' => 'telegram', 'label' => 'TG', 'verified' => true, 'config' => ['chat_id' => '12345'], 'created_at' => '2026-01-02T00:00:00+00:00'],
             ],
             'total' => 2,

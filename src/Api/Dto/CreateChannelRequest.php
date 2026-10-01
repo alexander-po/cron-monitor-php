@@ -101,4 +101,20 @@ final class CreateChannelRequest
 
         return $body;
     }
+
+    /**
+     * `print_r()` and `var_dump()` show the webhook URL and the secret the way
+     * PHP shows a `#[\SensitiveParameter]` argument: whoever holds the URL can
+     * post to the channel, and whoever holds the secret can sign a delivery.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $properties = get_object_vars($this);
+        $properties['webhookUrl'] = new \SensitiveParameterValue($this->webhookUrl);
+        $properties['secret'] = new \SensitiveParameterValue($this->secret);
+
+        return $properties;
+    }
 }
