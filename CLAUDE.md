@@ -18,6 +18,8 @@ regex, accepted HTTP responses — is the cron-monitor backend (the private
 service repo: its ping controller and `Ping` entity). When you change either
 side, update both.
 
+Release history lives in `CHANGELOG.md`, not in this file.
+
 ## Hard contract: never break the host job
 
 Every code path in this SDK runs **inside the user's scheduled job**. A
@@ -45,8 +47,6 @@ and asserts the host-job equivalent still completes.
 
 ## Branch & commit conventions
 
-Mirrors the sibling project — same rules, same reasoning:
-
 - **Never commit directly to `main`.** Every change lives on its own
   feature branch and lands on `main` via a merged pull request. No
   exceptions for "small" or "docs-only".
@@ -59,11 +59,13 @@ Mirrors the sibling project — same rules, same reasoning:
   ```bash
   git reset --soft origin/main
   git commit  # one commit, with a real message
-  git push --force-with-lease
   ```
   Rationale: `main` history is linear, every commit on `main` is
-  revertable, `git bisect` is usable, and the deploy audit trail maps
-  1:1 to reviewed PRs.
+  revertable, `git bisect` is usable, and each commit on `main` maps
+  1:1 to a reviewed PR.
+- **The owner pushes.** The agent commits and stops there: it pushes
+  only when the owner asks in the current turn, and never force-pushes.
+  After a squash the owner runs `git push --force-with-lease`.
 - Local `main` must always equal `origin/main`. If you find yourself
   with a direct-to-main commit, move it to a branch
   (`git branch <topic> <sha> && git reset --hard origin/main`) before
@@ -138,7 +140,7 @@ not a file path:
 | Channel kinds         | `src/Api/Dto/ChannelKind.php` (request-side) | backend `ChannelKind` enum                              |
 | Plan keys             | `src/Api/Dto/PlanKey.php` (`free/starter/growth/scale`) | backend `Plan` enum                          |
 | BIGINT ids as strings | `Ping`/`Alert`/`Channel`/`MonitorChannel` `$id` (`string`) | backend serialises Doctrine BIGINT `getId()` as JSON string |
-| Monitor alert routing | `Monitor::$channels` → `MonitorChannel` (`id`/`kind`/`label`) | backend embeds the same slim projection in its monitor payload, ordered by channel id (live 2026-07-29); older deployments omit the key, so hydration tolerates it missing or null |
+| Monitor alert routing | `Monitor::$channels` → `MonitorChannel` (`id`/`kind`/`label`) | backend embeds the same slim projection in its monitor payload, ordered by channel id; older deployments omit the key, so hydration tolerates it missing or null |
 | 204 / 502 contract    | `requestNoContent()` (204); generic 502 → `UnexpectedResponseException`, `testChannel()` 502 → `ChannelDeliveryException` (subclass) | backend DELETE routes; channel-test bad-gateway (502) |
 | `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | backend idempotency guard (full-body fingerprint)         |
 | Log digest for a UUID | `CronMonitorClient::hashUuid()` (`substr(sha256(lowercased uuid), 0, 16)`) | the same truncated digest the backend logs — the two streams join on it, so the input form must stay identical on both sides |
@@ -160,28 +162,12 @@ Don't add these without explicit design discussion:
   code's lifetime.
 - The management client (`CronMonitor\Api\MonitorApiClient`) THROWS
   (admin / CLI context); keep it strictly separate from the no-throw ping
-  client. 1.0.0 shipped list / get / create monitors + list channels;
-  1.1.0 rounded it out to the backend's full `/api/v1` surface — monitor
-  lifecycle (update / delete / pause / resume / snooze / rotate-uuid),
-  history reads (pings cursor-paginated, alerts offset-paginated), channel
-  lifecycle (create / get / rename / delete / rotate-secret / test),
-  `getAccount`, and optional `Idempotency-Key` on creates. The bridge
-  `cron-monitor:sync` also gained `--apply` (create missing monitors via
-  the shared `src/Sync/MonitorReconciler`). 1.2.0 added
-  `ChannelDeliveryException`: `testChannel()`'s 502 (downstream delivery
-  failed) now rethrows this `UnexpectedResponseException` subclass, while
-  `ExceptionFactory` stays generic — a 502 from any other endpoint is still
-  a plain `UnexpectedResponseException`. 1.3.0 made monitor **reads** report
-  alert routing — `Monitor::$channels` as a list of `MonitorChannel`
-  (`id`/`kind`/`label`), so routing can be confirmed after a write, diffed
-  against a spec, or copied between monitors; it reports attachment, not
-  deliverability, and an empty list must never be fed straight back into
-  `channelIds` (that clears routing). See README "Managing monitors via
-  the API". 1.5.0 added the two anonymous signup calls
-  (`startSignup` / `pollSignupToken`) and the `vendor/bin/cron-monitor
-  signup` command on top of them, whose standard output carries only the
-  `CRON_MONITOR_API_KEY=` line. Still deferred to a later minor: surfacing
-  `Idempotency-Replayed`.
+  client. `Monitor::$channels` reports attachment, not deliverability, and
+  an empty list must never be fed straight back into `channelIds` — that
+  clears routing. See README "Managing monitors via the API". Surfacing
+  `Idempotency-Replayed` is deferred to a later minor.
+- Anything but the `CRON_MONITOR_API_KEY=` line on the standard output of
+  `vendor/bin/cron-monitor signup`.
 - Bundled framework version pins. Composer constraints stay loose
   (`^6.4 || ^7.0` for Symfony, `^10.0 || ^11.0` for Laravel); the
   user's app pins.
