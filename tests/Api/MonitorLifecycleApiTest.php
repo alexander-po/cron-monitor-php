@@ -100,6 +100,22 @@ final class MonitorLifecycleApiTest extends TestCase
         self::assertSame(['channel_ids' => ['3', '11']], json_decode((string) $http->requests[0]->getBody(), true));
     }
 
+    public function test_a_monitor_routed_to_the_newer_channel_kinds_reads_back(): void
+    {
+        $http = new RecordingHttpClient([self::jsonResponse(200, self::monitorRow(['channels' => [
+            ['id' => '4', 'kind' => 'teams', 'label' => 'ops-teams'],
+            ['id' => '5', 'kind' => 'google_chat', 'label' => 'ops-space'],
+            ['id' => '6', 'kind' => 'pagerduty', 'label' => 'on-call'],
+        ]]))]);
+
+        $monitor = $this->client($http)->getMonitor(self::UUID);
+
+        self::assertSame(
+            ['4:teams', '5:google_chat', '6:pagerduty'],
+            array_map(static fn (MonitorChannel $c): string => $c->id.':'.$c->kind, $monitor->channels),
+        );
+    }
+
     public function test_update_monitor_rejects_empty_patch_without_http(): void
     {
         $http = new RecordingHttpClient([]);

@@ -467,6 +467,23 @@ before branching on behaviour. Writing stays closed: a request DTO accepts
 nothing but a real enum case, so a passed-through value cannot be sent back as
 if the SDK understood it. Wrongly *typed* fields still fail the read loudly.
 
+**Teams, Google Chat and PagerDuty channels (1.6.0).** Three more kinds, each with
+a named constructor on `CreateChannelRequest`:
+
+```php
+$api->createChannel(CreateChannelRequest::teams('Ops Teams', $teamsWorkflowUrl));
+$api->createChannel(CreateChannelRequest::googleChat('Ops space', $googleChatWebhookUrl));
+$api->createChannel(CreateChannelRequest::pagerDuty('On call', $integrationKey));
+```
+
+Teams and Google Chat take a `webhook_url`; PagerDuty takes the 32-letter-and-digit
+Integration Key of an Events API v2 integration, sent as `routing_key`. The SDK checks
+only that the value is present: the host, length and pattern are the server's to judge,
+and a rejection arrives as a `ValidationException`. The webhook URL and the routing key
+are credentials; the server redacts them in every response, `print_r()` and `var_dump()`
+of the request mask them, and a channel of any kind this SDK version has no case for
+still reads back, with its kind as the raw string in `Channel::$kind`.
+
 **Reading a monitor's alert routing (1.3.0).** Every monitor a read returns carries
 `channels` — the notification channels it alerts, in the backend's id order:
 

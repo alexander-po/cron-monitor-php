@@ -7,7 +7,7 @@ namespace CronMonitor\Api\Dto;
 use CronMonitor\Api\Internal\Hydrator;
 
 /**
- * A notification channel (email / telegram / slack / discord / webhook).
+ * A notification channel (email / telegram / slack / discord / webhook / teams / google_chat / pagerduty).
  *
  * `kind` is a plain string rather than an `Enum|string` like the other open
  * vocabularies ({@see MonitorStatus}). Channel kinds are the part of the API
@@ -18,7 +18,8 @@ use CronMonitor\Api\Internal\Hydrator;
  *
  * `config` is whatever the backend returns for the channel's transport
  * settings, with secret credentials already masked server-side (e.g.
- * webhook URLs / secrets come back as `***`). It is stored verbatim.
+ * webhook URLs, secrets and routing keys come back as `***`). It is stored
+ * verbatim.
  *
  * `id` is the backend's BIGINT identifier carried as a string (it can exceed
  * PHP's int range), matching the API's serialized type.
