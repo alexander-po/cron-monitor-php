@@ -32,6 +32,7 @@ final class ChannelLifecycleApiTest extends TestCase
     private const WEBHOOK_TOKEN = 'fake-webhook-path-lifecycle';
     private const WEBHOOK_URL = 'https://hooks.example.test/deliver/'.self::WEBHOOK_TOKEN;
     private const WEBHOOK_SECRET = 'signing-secret-fake-lifecycle';
+    private const ROUTING_KEY = 'fakeroutingkey0000000000fake0002';
 
     private function client(ClientInterface $http, int $retries = 0): MonitorApiClient
     {
@@ -83,6 +84,53 @@ final class ChannelLifecycleApiTest extends TestCase
         self::assertSame('https://cronheart.com/api/v1/channels', (string) $sent->getUri());
         self::assertSame('Bearer cmk_test_token', $sent->getHeaderLine('Authorization'));
         self::assertSame($request->toArray(), json_decode((string) $sent->getBody(), true));
+    }
+
+    public function test_create_channel_posts_a_pagerduty_routing_key_and_reads_the_redacted_channel_back(): void
+    {
+        $http = new RecordingHttpClient([self::jsonResponse(201, self::channelRow(['kind' => 'pagerduty', 'label' => 'On call', 'config' => ['routing_key' => '***']]))]);
+
+        $channel = $this->client($http)->createChannel(CreateChannelRequest::pagerDuty('On call', self::ROUTING_KEY));
+
+        self::assertSame('pagerduty', $channel->kind);
+        self::assertSame(['kind' => 'pagerduty', 'label' => 'On call', 'routing_key' => self::ROUTING_KEY], json_decode((string) $http->requests[0]->getBody(), true));
+    }
+
+    public function test_the_three_newer_kinds_read_back_as_their_raw_strings(): void
+    {
+        $rows = [];
+        foreach (['teams', 'google_chat', 'pagerduty'] as $i => $kind) {
+            $rows[] = self::channelRow(['id' => (string) ($i + 1), 'kind' => $kind, 'config' => ['masked' => '***']]);
+        }
+        $http = new RecordingHttpClient([
+            self::jsonResponse(200, ['data' => $rows, 'total' => 3]),
+            self::jsonResponse(200, $rows[2]),
+        ]);
+        $client = $this->client($http);
+
+        self::assertSame(['teams', 'google_chat', 'pagerduty'], array_map(static fn (Channel $c): string => $c->kind, $client->listChannels()->data));
+        self::assertSame('pagerduty', $client->getChannel('3')->kind);
+    }
+
+    public function test_a_rejected_pagerduty_create_keeps_its_routing_key_out_of_trace_arguments(): void
+    {
+        $create = fn () => $this->client(new RecordingHttpClient([self::jsonResponse(422, ['title' => 'Unprocessable Entity', 'detail' => 'The routing key was rejected.'])]))
+            ->createChannel(CreateChannelRequest::pagerDuty('On call', self::ROUTING_KEY));
+
+        $this->assertSecretStaysOutOfTraces(self::ROUTING_KEY, $create, ValidationException::class);
+    }
+
+    public function test_a_pagerduty_create_that_fails_in_transport_keeps_the_routing_key_out_of_trace_arguments(): void
+    {
+        $http = new class implements ClientInterface {
+            public function sendRequest(RequestInterface $request): ResponseInterface
+            {
+                throw new CurlException('Could not resolve host', $request);
+            }
+        };
+        $create = fn () => $this->client($http)->createChannel(CreateChannelRequest::pagerDuty('On call', self::ROUTING_KEY));
+
+        $this->assertSecretStaysOutOfTraces(self::ROUTING_KEY, $create, ApiTransportException::class);
     }
 
     public function test_create_channel_is_not_retried_on_server_error(): void

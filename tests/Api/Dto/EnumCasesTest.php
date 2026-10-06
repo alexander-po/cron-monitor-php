@@ -18,7 +18,7 @@ final class EnumCasesTest extends TestCase
         self::assertSame(['1h', '4h', '1d', '1w'], array_map(static fn (SnoozeDuration $c): string => $c->value, SnoozeDuration::cases()));
         self::assertSame(['heartbeat', 'start', 'success', 'fail'], array_map(static fn (PingKind $c): string => $c->value, PingKind::cases()));
         self::assertSame(['late', 'fail', 'recovered'], array_map(static fn (AlertKind $c): string => $c->value, AlertKind::cases()));
-        self::assertSame(['email', 'telegram', 'slack', 'discord', 'webhook'], array_map(static fn (ChannelKind $c): string => $c->value, ChannelKind::cases()));
+        self::assertSame(['email', 'telegram', 'slack', 'discord', 'webhook', 'teams', 'google_chat', 'pagerduty'], array_map(static fn (ChannelKind $c): string => $c->value, ChannelKind::cases()));
         self::assertSame(['free', 'starter', 'growth', 'scale'], array_map(static fn (PlanKey $c): string => $c->value, PlanKey::cases()));
     }
 

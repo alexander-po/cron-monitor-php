@@ -6,6 +6,7 @@ namespace CronMonitor\Tests\Api\Dto;
 
 use CronMonitor\Api\Dto\Channel;
 use CronMonitor\Api\Dto\ChannelPage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class ChannelTest extends TestCase
@@ -27,6 +28,33 @@ final class ChannelTest extends TestCase
         self::assertTrue($channel->verified);
         self::assertSame(['url' => '***', 'secret' => '***'], $channel->config);
         self::assertSame('2026-01-01T00:00:00+00:00', $channel->createdAt->format(\DateTimeInterface::RFC3339));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function kinds(): iterable
+    {
+        yield 'teams' => ['teams'];
+        yield 'google_chat' => ['google_chat'];
+        yield 'pagerduty' => ['pagerduty'];
+        yield 'a kind no SDK version knows' => ['carrier-pigeon'];
+    }
+
+    #[DataProvider('kinds')]
+    public function test_a_channel_of_a_newer_or_unknown_kind_hydrates_with_its_raw_kind(string $kind): void
+    {
+        $channel = Channel::fromArray([
+            'id' => '9',
+            'kind' => $kind,
+            'label' => 'Ops',
+            'verified' => true,
+            'config' => ['routing_key' => '***'],
+            'created_at' => '2026-01-01T00:00:00+00:00',
+        ]);
+
+        self::assertSame($kind, $channel->kind);
+        self::assertSame(['routing_key' => '***'], $channel->config);
     }
 
     public function test_channel_page_maps_rows_and_total(): void

@@ -20,4 +20,7 @@ enum ChannelKind: string
     case Slack = 'slack';
     case Discord = 'discord';
     case Webhook = 'webhook';
+    case Teams = 'teams';
+    case GoogleChat = 'google_chat';
+    case PagerDuty = 'pagerduty';
 }

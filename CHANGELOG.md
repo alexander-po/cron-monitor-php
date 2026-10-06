@@ -8,6 +8,26 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 _Nothing yet — open a PR and add your entry under the appropriate subsection._
 
+## [1.6.0] — 2026-10-06
+
+A minor release: `CreateChannelRequest` creates Microsoft Teams, Google Chat and PagerDuty channels, the three kinds the service now offers. Reading a channel of any kind, including these three, already worked and is unchanged.
+
+### Added
+
+- **`ChannelKind::Teams`, `GoogleChat` and `PagerDuty`, and `CreateChannelRequest::teams()`, `googleChat()` and `pagerDuty()`.** Teams and Google Chat take a webhook URL (`webhook_url` on the wire); PagerDuty takes the 32-letter-and-digit Integration Key of an Events API v2 integration, which the new `routingKey` property carries as `routing_key`. The constructor requires the transport field of each kind and refuses a routing key on any other kind, as it refuses a secret on any kind but a webhook. It checks presence only: the host, length and pattern are the server's to judge. The routing key is `#[\SensitiveParameter]` and `print_r()` and `var_dump()` mask it, as they mask the webhook URL and the secret.
+
+### Changed
+
+- **The `$routingKey` argument is appended to the `CreateChannelRequest` constructor**, after `$secret`, so positional callers are unaffected.
+
+### Upgrading
+
+- `ChannelKind` has three more cases, so a `match` over it that has no `default` arm throws `UnhandledMatchError` for them; add the arms or a `default`.
+
+### Documentation
+
+- `Channel::$kind` and `MonitorChannel::$kind` stay plain strings, so a channel of a kind this SDK version does not know reads back with its raw kind rather than failing the read; the docblocks and tests now say so and cover the three new kinds through `listChannels()`, `getChannel()` and a monitor's `channels`.
+
 ## [1.5.5] — 2026-10-01
 
 A patch: `print_r()` and `var_dump()` mask the credentials the SDK's DTOs and the `#[Monitor]` attribute hold, as they already do for `Configuration`, `ReconcileResult` and the framework bridges: a `Monitor` its UUID and the ping and badge URLs built from it, a `SignupToken` its API token, a `SignupStarted` its device code, a `ChannelSecret` its signing secret, a `CreateChannelRequest` its webhook URL and signing secret, and the attribute its UUID. The wire mapping is untouched.
