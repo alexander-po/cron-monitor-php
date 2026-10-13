@@ -31,9 +31,10 @@ return [
     |--------------------------------------------------------------------------
     | Retries
     |--------------------------------------------------------------------------
-    | Per-ping retry budget. Pings are idempotent server-side so retries are
-    | always safe; the conservative default keeps the worst-case end-of-job
-    | tail latency bounded.
+    | Per-ping retry budget. A retry repeats the same report, so it is safe,
+    | though a ping whose response was lost or came back as a server error
+    | may be recorded once more per retry; the conservative default keeps the
+    | worst-case end-of-job tail latency bounded.
     */
     'retries' => env('CRON_MONITOR_RETRIES', Configuration::DEFAULT_RETRIES),
 

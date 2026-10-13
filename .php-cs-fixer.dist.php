@@ -18,9 +18,9 @@ return (new PhpCsFixer\Config())
         'native_function_invocation' => ['include' => ['@compiler_optimized']],
         'phpdoc_to_comment' => false,
         'phpdoc_separation' => false,
-        // Stay consistent with the cron-monitor host project, which uses
-        // descriptive snake_case test method names. PER-CS / @Symfony want
-        // camelCase by default, so override explicitly.
+        // Test method names are descriptive sentences, which read best in
+        // snake_case. PER-CS / @Symfony want camelCase by default, so
+        // override explicitly.
         'php_unit_method_casing' => ['case' => 'snake_case'],
     ])
     ->setFinder($finder)

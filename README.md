@@ -89,7 +89,7 @@ try {
 The client **never throws** on network or HTTP errors — a broken
 cron-monitor backend will not break your job.
 
-For a custom endpoint (staging / preview), tighter timeout, or API key:
+For a custom endpoint (a self-hosted install), tighter timeout, or API key:
 
 ```php
 use CronMonitor\Client\Configuration;
@@ -97,7 +97,7 @@ use CronMonitor\Client\CronMonitorClient;
 
 $client = CronMonitorClient::create(
     new Configuration(
-        endpoint:       'https://staging.cronheart.com',
+        endpoint:       'https://cron.example.com',
         timeoutSeconds: 3.0,
         retries:        2,
         apiKey:         getenv('CRON_MONITOR_API_KEY') ?: null,
@@ -445,7 +445,7 @@ foreach ($api->allAlerts($uuid) as $alert) {
 }
 
 // Channels: create / rename / delete / test / rotate the signing secret.
-// Channel ids are strings (the backend id is a BIGINT) — pass $channel->id straight back.
+// Channel ids are strings, as the API sends them — pass $channel->id straight back.
 $channel = $api->createChannel(CreateChannelRequest::email('Ops inbox', 'ops@example.com'));
 $api->updateChannel($channel->id, 'Renamed');
 $result = $api->testChannel($channel->id);   // sends a real test alert (see "Channel-test outcomes")
@@ -530,8 +530,11 @@ the delivery, `testChannel()` throws `ChannelDeliveryException` carrying
 HTTP 502 — a subclass of `UnexpectedResponseException`, so any
 `catch (UnexpectedResponseException)` / `catch (ApiException)` written
 against 1.1.0 still catches it; catch the narrower type to tell a failed
-destination delivery apart from any other bad gateway. An unverified or
-transport-less channel throws `ValidationException` (HTTP 422) instead.
+destination delivery apart from any other bad gateway. While the channel's
+kind is disabled or its delivery is turned off on the service, the test is
+refused with `ConflictException` (HTTP 409) and nothing is sent; a test the
+service refuses as invalid throws `ValidationException` (HTTP 422), with the
+reason in `detail`.
 
 **Retries are per-verb.** Reads and idempotent transitions
 (PATCH / DELETE / pause / resume / snooze) retry within
@@ -625,7 +628,7 @@ zone, set the monitor's timezone on the dashboard after creating it.
 |----------------------------|--------------------------|-------|
 | `endpoint`                 | `https://cronheart.com`  | Self-hosted: point at your install. |
 | `timeout_seconds`          | `5.0`                    | Per-request, low by design. |
-| `retries`                  | `1`                      | Pings are idempotent server-side. |
+| `retries`                  | `1`                      | A ping whose response was lost or came back as a server error may be recorded once more per retry. |
 | `api_key`                  | `null`                   | Personal Access Token (`cmk_…`) for the management API, issued on every plan; not needed for pings. |
 | `allow_insecure_endpoint`  | `false`                  | Required for `http://` endpoints. Refused outright when `api_key` is set. |
 
@@ -641,6 +644,21 @@ zone, set the monitor's timezone on the dashboard after creating it.
   SHA-256 of the monitor UUID (the same digest the server logs, so the two
   join during an incident), and the management client reports the route it
   called — `/api/v1/monitors/{uuid}` — rather than the resolved path.
+- A dump that reads objects through `__debugInfo()` masks the credentials
+  it can reach; one that reads raw properties shows them all. `print_r()`
+  and `var_dump()` show the token, monitor UUIDs and the URLs built from them, webhook URLs,
+  signing secrets, routing keys and signup codes the way PHP shows a
+  `#[\SensitiveParameter]` argument. Symfony's VarDumper (`dump()`, `dd()`)
+  masks them where an object keeps them in a non-public property: the two
+  clients, the framework bridges and the sync command. It prints the public
+  properties of `Configuration`, `ReconcileResult`, the `#[Monitor]`
+  attribute and the API's DTOs as they are, and so do `json_encode()` (with
+  it a logger that JSON-encodes the objects in its context), `var_export()`
+  and `serialize()`; the last two print non-public properties too. A Laravel
+  job that carries `MonitorQueueJob` through `through()` stores the UUID and
+  the client's token in its queue payload, and a management-API transport
+  failure chains the HTTP client's exception, which keeps the request. Log
+  names and ids, not these objects.
 - The per-monitor UUID is treated as a write credential and must be a
   canonical UUID, nothing around it, before it is concatenated into a URL.
   The action segment must be one of `run`, `start`, `success`, `ok`, `fail`

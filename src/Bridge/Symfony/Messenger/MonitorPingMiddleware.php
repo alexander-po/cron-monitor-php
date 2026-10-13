@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Bridge\Symfony\Messenger;
 
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Internal\DebugInfo;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Messenger\Envelope;
@@ -122,9 +123,6 @@ final class MonitorPingMiddleware implements MiddlewareInterface
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['monitorMap'] = new \SensitiveParameterValue($this->monitorMap);
-
-        return $properties;
+        return DebugInfo::mask($this, 'monitorMap');
     }
 }

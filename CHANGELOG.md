@@ -6,7 +6,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet — open a PR and add your entry under the appropriate subsection._
+Also in this release: the masking `__debugInfo()` bodies share one internal helper, and the tests check `print_r()`, `var_dump()` and VarDumper of every class that masks a credential, including the bridges. A test pins that the ping client scrubs a monitor UUID a transport quotes in a different case than the caller passed. `symfony/var-dumper` is a direct dev dependency.
+
+### Security
+
+- **Symfony's VarDumper masks the credentials the clients, the framework bridges and the sync command hold.** `dump()` and `dd()` printed the API token of the `Configuration` held by `CronMonitorClient`, `MonitorApiClient` and the Symfony `cron-monitor:sync` command, and so of every bridge holding a client, along with the monitor UUID maps of `MonitorPingMiddleware` and `MonitorConsoleSubscriber` and the UUID of `MonitorQueueJob`. VarDumper honours `__debugInfo()` only for a non-public property, and only under the key PHP itself gives it, so each `__debugInfo()` now returns the properties under those keys, and the two clients and the command mask their configuration. `print_r()` and `var_dump()` of a client or a command now show the configuration masked, and print a bridge's private properties with their visibility, as PHP does without `__debugInfo()`. The public properties of `Configuration`, `ReconcileResult`, the `#[Monitor]` attribute and the API's DTOs still print under VarDumper, `json_encode()`, `var_export()` and `serialize()`; the README's Security section lists what each dump shows.
+
+### Changed
+
+- **A null credential prints as `null`.** `print_r()` and `var_dump()` masked a `CreateChannelRequest` webhook URL, secret or routing key, the UUID of a `ReconcileResult` or of a `#[Monitor]` attribute even when it was null; an absent value now shows as `null`.
+
+### Documentation
+
+- **A retried ping is described as what it is.** The docblocks, the Laravel config, the Symfony option and the README said pings are idempotent on the server; a retry repeats the same report, so it is safe, but a ping whose response was lost or came back as a server error may be recorded once more per retry.
+- **`MonitorApiClient::testChannel()` names its `409`.** While the channel's kind is disabled or its delivery is turned off on the service, the test send is refused with `409` (`ConflictException`) and nothing is sent.
+- The docblocks describe channel and ping ids, snooze windows and the ping body cap in terms of the API rather than of the service's storage, and the README's custom-endpoint example points at a self-hosted host.
 
 ## [1.6.0] — 2026-10-06
 
@@ -559,8 +573,8 @@ written against 1.1.0 keeps working unchanged.
   so existing `catch (UnexpectedResponseException)` / `catch (ApiException)`
   handling keeps working — a strictly additive narrowing, not a breaking
   change. Only `testChannel()` raises it; a 502 from any other endpoint
-  stays a plain `UnexpectedResponseException`, and an unverified or
-  transport-less channel still answers `422` (`ValidationException`).
+  stays a plain `UnexpectedResponseException`, and a `422` stays a
+  `ValidationException`.
 
 ### Changed
 
@@ -611,16 +625,15 @@ creates missing monitors. **No breaking changes** — code written against
 
 ### Fixed
 
-- `Channel::$id` is now a string (the backend serialises the channel's
-  BIGINT id as a JSON string); the 1.0.0 `int` typing would have thrown on
+- `Channel::$id` is now a string (the API sends the channel id as a
+  JSON string); the 1.0.0 `int` typing would have thrown on
   every real `listChannels()` response. The channel-by-id methods
   (`getChannel`, `updateChannel`, `deleteChannel`, `rotateChannelSecret`,
   `testChannel`) take the id as a `string` to match, and
   `CreateMonitorRequest`/`UpdateMonitorRequest::$channelIds` now accept
   `int|string` (normalised to a string on the wire) — so a returned
   `$channel->id` feeds straight back in (to fetch, mutate, or route a
-  monitor) without a lossy `(int)` cast that would corrupt a BIGINT beyond
-  PHP's int range. Passing channel ids as ints stays valid, so existing
+  monitor) without a lossy `(int)` cast that would corrupt a large id. Passing channel ids as ints stays valid, so existing
   1.0.0 `createMonitor` callers keep working.
 
 ## [1.0.0] — 2026-06-09

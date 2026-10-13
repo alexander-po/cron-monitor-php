@@ -9,6 +9,7 @@ use CronMonitor\Api\Dto\CreateChannelRequest;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Exception\ChannelDeliveryException;
+use CronMonitor\Api\Exception\ConflictException;
 use CronMonitor\Api\Exception\NotFoundException;
 use CronMonitor\Api\Exception\UnexpectedResponseException;
 use CronMonitor\Api\Exception\ValidationException;
@@ -404,15 +405,29 @@ final class ChannelLifecycleApiTest extends TestCase
         }
     }
 
-    public function test_test_channel_maps_422_unverified(): void
+    public function test_test_channel_maps_422_to_validation(): void
     {
         $http = new RecordingHttpClient([self::jsonResponse(422, [
-            'detail' => 'This email channel is not yet verified. Click the verification link first.',
+            'detail' => 'This channel cannot be tested yet.',
         ])]);
         $client = $this->client($http);
 
         $this->expectException(ValidationException::class);
         $client->testChannel('7');
+    }
+
+    public function test_test_channel_maps_409_to_conflict(): void
+    {
+        $http = new RecordingHttpClient([self::jsonResponse(409, ['title' => 'Conflict', 'detail' => 'Test sends are unavailable for this channel.'])]);
+        $client = $this->client($http);
+
+        try {
+            $client->testChannel('7');
+            self::fail('Expected an exception.');
+        } catch (ConflictException $e) {
+            self::assertSame(409, $e->statusCode);
+        }
+        self::assertCount(1, $http->requests);
     }
 
     public function test_test_channel_is_not_retried_on_server_error(): void

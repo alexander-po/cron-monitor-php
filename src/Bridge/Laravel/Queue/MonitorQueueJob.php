@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Bridge\Laravel\Queue;
 
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Internal\DebugInfo;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -167,9 +168,6 @@ final class MonitorQueueJob
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['monitorUuid'] = new \SensitiveParameterValue($this->monitorUuid);
-
-        return $properties;
+        return DebugInfo::mask($this, 'monitorUuid');
     }
 }

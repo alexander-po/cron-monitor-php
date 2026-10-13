@@ -87,8 +87,8 @@ final class ChannelTest extends TestCase
 
     public function test_channel_id_must_be_a_string(): void
     {
-        // The backend serializes the channel's BIGINT id as a JSON string; an
-        // int must be rejected rather than silently accepted.
+        // The API sends the channel id as a JSON string; an int must be
+        // rejected rather than silently accepted.
         $this->expectException(\UnexpectedValueException::class);
         Channel::fromArray([
             'id' => 7,

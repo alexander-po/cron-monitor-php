@@ -10,6 +10,7 @@ use CronMonitor\Bridge\Symfony\DependencyInjection\CronMonitorExtension;
 use CronMonitor\Bridge\Symfony\Scheduler\ScheduleInventory;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
@@ -30,6 +31,8 @@ use Symfony\Component\Scheduler\Trigger\TriggerInterface;
 
 final class SyncCommandTest extends TestCase
 {
+    use SecretDumpAssertions;
+
     /**
      * Builds an inventory of one job whose trigger stringifies to `$triggerStr`.
      * A custom TriggerInterface sidesteps the optional dragonmantank/cron-
@@ -228,5 +231,14 @@ final class SyncCommandTest extends TestCase
 
         self::assertSame(0, $exit);
         self::assertSame(["7\n"], json_decode($http->bodies[1], true)['channel_ids'] ?? null);
+    }
+
+    public function test_a_dumped_command_masks_its_configuration_and_its_client(): void
+    {
+        $key = 'cmk_fake_dumped_sync_command_token';
+        $command = new SyncCommand($this->inventory(), $this->apiClient(new RecordingHttpClient([]), $key), new Configuration('https://cronheart.com', apiKey: $key));
+
+        self::assertDumpsMask($command, [$key], ['configuration']);
+        self::assertVarDumperHides($command, [$key]);
     }
 }

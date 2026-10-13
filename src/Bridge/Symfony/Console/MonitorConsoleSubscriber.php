@@ -6,6 +6,7 @@ namespace CronMonitor\Bridge\Symfony\Console;
 
 use CronMonitor\Attribute\Monitor;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Internal\DebugInfo;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Console\Command\Command;
@@ -338,10 +339,6 @@ final class MonitorConsoleSubscriber implements EventSubscriberInterface
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['commandMap'] = new \SensitiveParameterValue($this->commandMap);
-        $properties['attributeUuidCache'] = new \SensitiveParameterValue($this->attributeUuidCache);
-
-        return $properties;
+        return DebugInfo::mask($this, 'commandMap', 'attributeUuidCache');
     }
 }

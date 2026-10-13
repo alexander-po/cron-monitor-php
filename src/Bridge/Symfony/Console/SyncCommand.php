@@ -10,6 +10,7 @@ use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Bridge\Symfony\Scheduler\ScheduledJob;
 use CronMonitor\Bridge\Symfony\Scheduler\ScheduleInventory;
 use CronMonitor\Client\Configuration;
+use CronMonitor\Internal\DebugInfo;
 use CronMonitor\Sync\MonitorReconciler;
 use CronMonitor\Sync\ReconcilableJob;
 use CronMonitor\Sync\ReconcileOutcome;
@@ -289,5 +290,17 @@ final class SyncCommand extends Command
         $io->error(\sprintf('Unknown --format=%s. Allowed: table, yaml, json.', $format));
 
         return Command::INVALID;
+    }
+
+    /**
+     * `print_r()`, `var_dump()` and Symfony's VarDumper show the configuration
+     * the way PHP shows a `#[\SensitiveParameter]` argument: VarDumper cannot
+     * hide the token in its public `apiKey`.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        return DebugInfo::mask($this, 'configuration');
     }
 }

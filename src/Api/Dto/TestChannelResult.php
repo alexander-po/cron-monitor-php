@@ -11,11 +11,15 @@ use CronMonitor\Api\Internal\Hydrator;
  * delivered, whether that delivery newly verified the channel, and the
  * (possibly now-verified) channel.
  *
- * The backend does not return a 200 with `delivered: false` — a failed
- * delivery surfaces as an exception instead (HTTP 502 →
- * {@see \CronMonitor\Api\Exception\UnexpectedResponseException}; an unverified
- * or transport-less channel → 422
- * {@see \CronMonitor\Api\Exception\ValidationException}).
+ * A send that does not succeed surfaces as an exception from
+ * {@see \CronMonitor\Api\MonitorApiClient::testChannel()}: a delivery to the
+ * destination that failed answers `502`
+ * ({@see \CronMonitor\Api\Exception\ChannelDeliveryException}); while the
+ * channel's kind is disabled or its delivery is turned off on the service, the
+ * send is refused with `409` ({@see \CronMonitor\Api\Exception\ConflictException})
+ * and nothing is sent; a test the service refuses as invalid answers `422`
+ * ({@see \CronMonitor\Api\Exception\ValidationException}), with the reason in
+ * `detail`.
  */
 final class TestChannelResult
 {

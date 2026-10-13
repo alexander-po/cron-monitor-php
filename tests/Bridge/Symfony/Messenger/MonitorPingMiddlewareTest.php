@@ -9,6 +9,7 @@ use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
@@ -22,9 +23,11 @@ use Symfony\Component\Messenger\Stamp\ReceivedStamp;
 
 final class MonitorPingMiddlewareTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
     private const UUID = '00000000-0000-0000-0000-000000000000';
+    private const API_KEY = 'cmk_fake_dumped_middleware_token';
 
     public function test_a_failed_ping_keeps_the_uuid_out_of_the_frames_a_logger_records(): void
     {
@@ -120,6 +123,16 @@ final class MonitorPingMiddlewareTest extends TestCase
         // Body of the fail ping should carry the exception summary so an
         // operator triaging the dashboard sees the immediate cause.
         self::assertStringContainsString('RuntimeException: handler boom', (string) $http->requests[1]->getBody());
+    }
+
+    public function test_a_dumped_middleware_masks_its_monitor_map_and_the_token_of_its_client(): void
+    {
+        $factory = new HttpFactory();
+        $client = new CronMonitorClient(new Configuration('https://cronheart.com', apiKey: self::API_KEY), new RecordingHttpClient([]), $factory, $factory);
+        $middleware = new MonitorPingMiddleware($client, [SampleMessage::class => self::UUID]);
+
+        self::assertDumpsMask($middleware, [self::UUID, self::API_KEY], ['monitorMap']);
+        self::assertVarDumperHides($middleware, [self::UUID, self::API_KEY]);
     }
 
     /**

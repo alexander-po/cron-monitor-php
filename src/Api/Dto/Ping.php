@@ -14,9 +14,9 @@ use CronMonitor\Api\Internal\Hydrator;
  * is the enum case when the SDK knows the value and the server's verbatim
  * string when it does not, so a kind added server-side cannot make a
  * history page unreadable.
- * `runtimeMs` is null unless the ping reported a duration. `id` is the
- * backend's BIGINT identifier carried as a string (it can exceed PHP's int
- * range), matching the API's serialized type.
+ * `runtimeMs` is null unless the ping reported a duration. `id` is the JSON
+ * string the API sends, kept a string so it round-trips without a lossy
+ * `(int)` cast.
  */
 final class Ping
 {
