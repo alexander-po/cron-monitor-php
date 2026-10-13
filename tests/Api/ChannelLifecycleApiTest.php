@@ -405,10 +405,10 @@ final class ChannelLifecycleApiTest extends TestCase
         }
     }
 
-    public function test_test_channel_maps_422_unverified(): void
+    public function test_test_channel_maps_422_to_validation(): void
     {
         $http = new RecordingHttpClient([self::jsonResponse(422, [
-            'detail' => 'This email channel is not yet verified. Click the verification link first.',
+            'detail' => 'This channel cannot be tested yet.',
         ])]);
         $client = $this->client($http);
 

@@ -532,8 +532,9 @@ HTTP 502 — a subclass of `UnexpectedResponseException`, so any
 against 1.1.0 still catches it; catch the narrower type to tell a failed
 destination delivery apart from any other bad gateway. While the channel's
 kind is disabled or its delivery is turned off on the service, the test is
-refused with `ConflictException` (HTTP 409) and nothing is sent; an
-unverified channel throws `ValidationException` (HTTP 422).
+refused with `ConflictException` (HTTP 409) and nothing is sent; a test the
+service refuses as invalid throws `ValidationException` (HTTP 422), with the
+reason in `detail`.
 
 **Retries are per-verb.** Reads and idempotent transitions
 (PATCH / DELETE / pause / resume / snooze) retry within

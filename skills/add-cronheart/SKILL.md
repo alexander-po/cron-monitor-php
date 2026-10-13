@@ -308,7 +308,7 @@ Only the management client throws (`MonitorApiClient`, and `cron-monitor:sync --
 | `PlanRestrictionException` | 402 | The account's plan does not include API access; `upgradeUrl` links to the plan page. | An install where the Free plan has API access never sends it. On one that predates that change, create the monitors in the dashboard (6c) and skip `--apply`. |
 | `ForbiddenException` | 403 | The token is valid but the action is refused: the plan's monitor limit is reached, or the account's email is not verified. | Verify the email, delete unused monitors or upgrade; existing monitors keep working. |
 | `NotFoundException` | 404 | No such monitor or channel, including one that belongs to another account. | Check the UUID or id and the account the token belongs to. |
-| `ConflictException` | 409 | The request conflicts with the current state, such as a disabled notification transport. | Read `detail`. |
+| `ConflictException` | 409 | The request conflicts with the current state, such as a channel kind that is disabled or whose delivery is turned off on the service. | Read `detail`. |
 | `ValidationException` | 422 | A field was rejected; `errors` maps field to message. | Fix the schedule expression or timezone. |
 | `RateLimitException` | 429 | The account's request limit for its plan; `retryAfter` is the wait in seconds. | Wait and rerun; creates are never retried automatically. |
 | `UnexpectedResponseException` | 400, 5xx, other | A malformed request or a server error. | Rerun later. `ChannelDeliveryException` is its 502 subclass, raised only by `testChannel()` when the destination refused the test alert; `SignupExpiredException` is its 410 subclass, raised only by `pollSignupToken()` when a signup is expired or already used. |

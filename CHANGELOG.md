@@ -573,8 +573,8 @@ written against 1.1.0 keeps working unchanged.
   so existing `catch (UnexpectedResponseException)` / `catch (ApiException)`
   handling keeps working — a strictly additive narrowing, not a breaking
   change. Only `testChannel()` raises it; a 502 from any other endpoint
-  stays a plain `UnexpectedResponseException`, and an unverified or
-  transport-less channel still answers `422` (`ValidationException`).
+  stays a plain `UnexpectedResponseException`, and a `422` stays a
+  `ValidationException`.
 
 ### Changed
 

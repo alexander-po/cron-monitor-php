@@ -538,14 +538,14 @@ final class MonitorApiClient
      * **Never retried.** A test send has an external side effect (it actually
      * delivers) and consumes the per-user / per-IP test-send budget, so a
      * blind replay would double-send and burn rate budget. A well-formed
-     * request whose downstream destination rejected the delivery answers
-     * `502`, surfaced as {@see ChannelDeliveryException} — a
+     * request whose delivery to the destination failed answers `502`, surfaced as {@see ChannelDeliveryException} — a
      * {@see UnexpectedResponseException} subclass, so existing
      * `catch (UnexpectedResponseException)` handling still catches it. While
      * the channel's kind is disabled or its delivery is turned off on the
      * service, the send is refused with `409`
-     * ({@see Exception\ConflictException}) and nothing is sent; an unverified
-     * channel answers `422` ({@see Exception\ValidationException}).
+     * ({@see Exception\ConflictException}) and nothing is sent; a test the
+     * service refuses as invalid answers `422`
+     * ({@see Exception\ValidationException}), with the reason in `detail`.
      *
      * @throws ApiException
      */
