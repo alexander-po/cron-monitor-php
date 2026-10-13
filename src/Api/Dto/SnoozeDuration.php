@@ -8,8 +8,8 @@ namespace CronMonitor\Api\Dto;
  * Allowed snooze windows for `POST /api/v1/monitors/{uuid}/snooze`.
  *
  * Request-side only: a backed enum gives compile-time safety and removes the
- * need for a runtime guard on the snooze body. Mirrors the backend's
- * `SnoozeDuration` set.
+ * need for a runtime guard on the snooze body. Mirrors the set of windows
+ * the API accepts.
  */
 enum SnoozeDuration: string
 {

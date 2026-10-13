@@ -21,8 +21,8 @@ use CronMonitor\Api\Internal\Hydrator;
  * webhook URLs, secrets and routing keys come back as `***`). It is stored
  * verbatim.
  *
- * `id` is the backend's BIGINT identifier carried as a string (it can exceed
- * PHP's int range), matching the API's serialized type.
+ * `id` is the JSON string the API sends, kept a string so it round-trips
+ * without a lossy `(int)` cast.
  */
 final class Channel
 {

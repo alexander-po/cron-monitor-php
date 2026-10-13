@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CronMonitor\Attribute;
 
+use CronMonitor\Internal\DebugInfo;
+
 /**
  * Marks a command class (Symfony Console / Laravel Artisan) as a
  * cron-monitor target, without forcing the user to maintain a parallel
@@ -105,9 +107,6 @@ final class Monitor
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['uuid'] = new \SensitiveParameterValue($this->uuid);
-
-        return $properties;
+        return DebugInfo::mask($this, 'uuid');
     }
 }

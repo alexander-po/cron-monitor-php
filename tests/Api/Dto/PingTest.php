@@ -35,8 +35,8 @@ final class PingTest extends TestCase
 
     public function test_ping_id_must_be_a_string(): void
     {
-        // The backend serializes the BIGINT id as a JSON string; an int would
-        // silently break against the real API, so the DTO rejects it.
+        // The API sends the id as a JSON string; an int would silently break
+        // against the real API, so the DTO rejects it.
         $this->expectException(\UnexpectedValueException::class);
         Ping::fromArray(['id' => 254, 'kind' => 'heartbeat', 'received_at' => '2026-06-09T12:00:00+00:00', 'runtime_ms' => null]);
     }

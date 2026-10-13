@@ -7,6 +7,7 @@ namespace CronMonitor\Tests\Client;
 use CronMonitor\Api\MonitorApiClient;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use CronMonitor\Tests\Support\UuidPlaceholder;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -15,6 +16,7 @@ use PHPUnit\Framework\TestCase;
 
 final class ConfigurationTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
     private const API_KEY = 'cmk_fake_configuration_test_key';
@@ -245,7 +247,20 @@ final class ConfigurationTest extends TestCase
         foreach ($builds as $build) {
             $this->assertSecretStaysOutOfTraces(self::API_KEY, $build, \TypeError::class);
         }
-        self::assertStringNotContainsString(self::API_KEY, print_r(MonitorApiClient::create($configuration), true));
-        self::assertStringNotContainsString(self::API_KEY, print_r(CronMonitorClient::create($configuration), true));
+    }
+
+    public function test_a_dumped_configuration_masks_the_api_key(): void
+    {
+        self::assertDumpsMask(new Configuration('https://cronheart.com', apiKey: self::API_KEY), [self::API_KEY], ['apiKey']);
+    }
+
+    public function test_a_dumped_client_masks_its_configuration(): void
+    {
+        $configuration = new Configuration('https://cronheart.com', apiKey: self::API_KEY);
+
+        foreach ([MonitorApiClient::create($configuration), CronMonitorClient::create($configuration)] as $client) {
+            self::assertDumpsMask($client, [self::API_KEY], ['configuration']);
+            self::assertVarDumperHides($client, [self::API_KEY]);
+        }
     }
 }

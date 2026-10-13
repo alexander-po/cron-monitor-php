@@ -14,6 +14,7 @@ use CronMonitor\Tests\Fixtures\Symfony\MonitoredAttributedCommand;
 use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\InMemoryLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
@@ -32,9 +33,11 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 
 final class MonitorConsoleSubscriberTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
     private const UUID = '00000000-0000-0000-0000-000000000001';
+    private const API_KEY = 'cmk_fake_dumped_subscriber_token';
 
     public function test_a_failed_ping_keeps_a_mapped_uuid_out_of_the_frames_a_logger_records(): void
     {
@@ -589,6 +592,16 @@ final class MonitorConsoleSubscriberTest extends TestCase
         // class.
         self::assertCount(1, $cache);
         self::assertSame(MonitoredAttributedCommand::UUID, $cache[MonitoredAttributedCommand::class]);
+    }
+
+    public function test_a_dumped_subscriber_masks_its_uuid_maps_and_the_token_of_its_client(): void
+    {
+        $factory = new HttpFactory();
+        $client = new CronMonitorClient(new Configuration('https://cronheart.com', apiKey: self::API_KEY), new RecordingHttpClient([]), $factory, $factory);
+        $subscriber = new MonitorConsoleSubscriber($client, ['app:reports:nightly' => self::UUID]);
+
+        self::assertDumpsMask($subscriber, [self::UUID, self::API_KEY], ['commandMap', 'attributeUuidCache']);
+        self::assertVarDumperHides($subscriber, [self::UUID, self::API_KEY]);
     }
 
     /**

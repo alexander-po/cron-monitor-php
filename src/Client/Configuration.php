@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CronMonitor\Client;
 
+use CronMonitor\Internal\DebugInfo;
+
 /**
  * Immutable configuration value object for the SDK.
  *
@@ -31,10 +33,12 @@ final class Configuration
     public const DEFAULT_TIMEOUT_SECONDS = 5.0;
 
     /**
-     * Per-ping retry budget. Pings are idempotent so retries are safe; we
-     * default to a small budget because the scheduler context typically has
-     * its own timeout (e.g. a Symfony Messenger middleware), and stacking
-     * retries on top of that turns a single late job into a 30 s stall.
+     * Per-ping retry budget. A retry repeats the same report, so it is safe,
+     * though a ping whose response was lost or came back as a server error
+     * may be recorded once more per retry; we default to a small budget
+     * because the scheduler context typically has its own timeout (e.g. a
+     * Symfony Messenger middleware), and stacking retries on top of that
+     * turns a single late job into a 30 s stall.
      */
     public const DEFAULT_RETRIES = 1;
 
@@ -153,11 +157,6 @@ final class Configuration
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        if (null !== $this->apiKey) {
-            $properties['apiKey'] = new \SensitiveParameterValue($this->apiKey);
-        }
-
-        return $properties;
+        return DebugInfo::mask($this, 'apiKey');
     }
 }

@@ -200,6 +200,35 @@ final class CronMonitorClientLoggingTest extends TestCase
         self::assertStringNotContainsStringIgnoringCase($uuid, $result->errorMessage);
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function mismatchedUuidSpellings(): iterable
+    {
+        $lower = UuidPlaceholder::withHexLetters(self::UUID);
+
+        yield 'caller lower case, transport upper case' => [$lower, strtoupper($lower)];
+        yield 'caller upper case, transport lower case' => [strtoupper($lower), $lower];
+        yield 'caller lower case, transport mixed case' => [$lower, strtoupper(substr($lower, 0, 4)).substr($lower, 4)];
+    }
+
+    #[DataProvider('mismatchedUuidSpellings')]
+    public function test_a_transport_quoting_the_uuid_in_another_case_is_scrubbed(string $passed, string $quoted): void
+    {
+        $http = new RecordingHttpClient([
+            $this->transportError('cURL error 7: Failed to connect for https://cronheart.com/ping/'.$quoted.'/success'),
+        ]);
+        $logger = new InMemoryLogger();
+
+        $result = $this->clientWith($http, $logger)->success($passed, 'ok');
+
+        $expected = 'cURL error 7: Failed to connect for https://cronheart.com/ping/'
+            .substr(hash('sha256', strtolower($passed)), 0, 16).'/success';
+        self::assertCount(1, $http->requests);
+        self::assertSame($expected, $result->errorMessage);
+        self::assertSame($expected, $this->recordAt('warning', $logger)['context']['last_error'] ?? null);
+    }
+
     public function test_a_uuid_with_a_trailing_newline_is_rejected_before_a_transport_can_quote_it(): void
     {
         // Guzzle's URI percent-encodes the newline.

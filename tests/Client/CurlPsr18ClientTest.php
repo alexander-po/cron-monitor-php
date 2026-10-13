@@ -7,6 +7,7 @@ namespace CronMonitor\Tests\Client;
 use CronMonitor\Client\CurlException;
 use CronMonitor\Client\CurlPsr18Client;
 use CronMonitor\Tests\Support\LocalHttpServer;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\TestCase;
@@ -16,6 +17,7 @@ use Psr\Http\Message\RequestInterface;
 
 final class CurlPsr18ClientTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
     private const TOKEN = 'cmk_fake_curl_test_token';
@@ -132,6 +134,7 @@ final class CurlPsr18ClientTest extends TestCase
             self::assertStringNotContainsString(self::TOKEN, $dump);
             self::assertStringNotContainsString(self::UUID, $dump);
         }
+        self::assertVarDumperHides(new CurlException('cURL error (7): Failed to connect.', $request), [self::TOKEN, self::UUID]);
     }
 
     private static function authenticatedPing(string $endpoint): RequestInterface

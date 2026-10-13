@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Client;
 
+use CronMonitor\Internal\DebugInfo;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -24,16 +25,16 @@ use Psr\Log\NullLogger;
  *  - body is bounded to 10 KB before sending. The server enforces a 10 KB
  *    cap server-side, but truncating client-side avoids paying egress cost
  *    on the inevitable enthusiastic user who tries to send 5 MB of stdout.
- *  - retries are bounded by `Configuration::retries`. Pings are idempotent
- *    on `(uuid, body_hash)` server-side, so retrying is safe.
+ *  - retries are bounded by `Configuration::retries`. A retry repeats the
+ *    same report, so it is safe; a ping whose response was lost or came
+ *    back as a server error may be recorded once more per retry.
  */
 final class CronMonitorClient
 {
     /**
-     * The server caps a ping's stored body excerpt at 10 000 bytes (the
-     * backend's ping entity enforces it). This client-side cap mirrors that
-     * exact value so we don't waste bandwidth on bytes the server would
-     * silently truncate. See CLAUDE.md's wire-anchor table — change one side
+     * The server keeps at most 10 000 bytes of a ping's body. This client-side
+     * cap mirrors that exact value so we don't waste bandwidth on bytes the
+     * server would silently truncate. See CLAUDE.md's wire-anchor table — change one side
      * and the other moves with it.
      */
     private const BODY_CAP_BYTES = 10000;
@@ -304,5 +305,18 @@ final class CronMonitorClient
         }
 
         return $slice;
+    }
+
+    /**
+     * `print_r()`, `var_dump()` and Symfony's VarDumper show the configuration
+     * the way PHP shows a `#[\SensitiveParameter]` argument: VarDumper cannot
+     * hide the token in its public `apiKey`, and every framework bridge holds
+     * this client.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        return DebugInfo::mask($this, 'configuration');
     }
 }

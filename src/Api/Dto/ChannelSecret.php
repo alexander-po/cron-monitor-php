@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Api\Dto;
 
 use CronMonitor\Api\Internal\Hydrator;
+use CronMonitor\Internal\DebugInfo;
 
 /**
  * Result of `POST /api/v1/channels/{id}/rotate-secret` (webhook channels): the
@@ -45,9 +46,6 @@ final class ChannelSecret
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['secret'] = new \SensitiveParameterValue($this->secret);
-
-        return $properties;
+        return DebugInfo::mask($this, 'secret');
     }
 }

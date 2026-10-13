@@ -37,6 +37,7 @@
         "guzzlehttp/psr7": "^2.6",
         "symfony/framework-bundle": "^6.4 || ^7.0",
         "symfony/scheduler": "^6.4 || ^7.0",
+        "symfony/var-dumper": "^6.4 || ^7.0 || ^8.0",
         "symfony/messenger": "^6.4 || ^7.0",
         "symfony/console": "^6.4 || ^7.0",
         "symfony/dependency-injection": "^6.4 || ^7.0",

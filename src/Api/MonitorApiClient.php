@@ -31,6 +31,7 @@ use CronMonitor\Api\Internal\ProblemDetails;
 use CronMonitor\Api\Internal\SecretRedactor;
 use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CurlPsr18Client;
+use CronMonitor\Internal\DebugInfo;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
@@ -311,10 +312,8 @@ final class MonitorApiClient
     {
         $this->assertUuid($uuid);
 
-        // The backend compares `confirm` with a strict, case-sensitive `!==`
-        // against the canonical lowercase UUID, while assertUuid (and the
-        // backend route) accept any case — so normalise to lowercase or an
-        // uppercase-but-valid UUID would 422 "Rotation must be confirmed".
+        // `confirm` must equal the monitor's current UUID as the API returns
+        // it, in lower case, while assertUuid accepts any case.
         $payload = $this->requestJson('POST', '/monitors/'.$uuid.'/rotate-uuid', ['confirm' => strtolower($uuid)], false);
 
         return $this->hydrate(static fn (): Monitor => Monitor::fromArray($payload));
@@ -542,9 +541,11 @@ final class MonitorApiClient
      * request whose downstream destination rejected the delivery answers
      * `502`, surfaced as {@see ChannelDeliveryException} — a
      * {@see UnexpectedResponseException} subclass, so existing
-     * `catch (UnexpectedResponseException)` handling still catches it; an
-     * unverified or transport-less channel answers `422`
-     * ({@see Exception\ValidationException}).
+     * `catch (UnexpectedResponseException)` handling still catches it. While
+     * the channel's kind is disabled or its delivery is turned off on the
+     * service, the send is refused with `409`
+     * ({@see Exception\ConflictException}) and nothing is sent; an unverified
+     * channel answers `422` ({@see Exception\ValidationException}).
      *
      * @throws ApiException
      */
@@ -681,12 +682,10 @@ final class MonitorApiClient
 
     /**
      * Validate a channel id locally before any HTTP request. The id is carried
-     * as a string — like {@see Channel::$id}, which the
-     * backend serialises from a Doctrine BIGINT that can exceed PHP's int range
-     * — so a returned `$channel->id` feeds straight back in without a lossy
-     * `(int)` cast. The backend route only matches a run of digits, so anything
-     * that is not a positive decimal integer is a programmer error worth a
-     * friendly local message.
+     * as a string — like {@see Channel::$id}, which the API sends as a JSON
+     * string — so a returned `$channel->id` feeds straight back in without a
+     * lossy `(int)` cast. The API returns ids as positive decimal integers, so
+     * anything else is a programmer error worth a friendly local message.
      */
     private function assertChannelId(string $id): void
     {
@@ -962,5 +961,17 @@ final class MonitorApiClient
         } catch (\UnexpectedValueException $e) {
             throw new ApiTransportException('The API returned a response the SDK could not interpret: '.$e->getMessage(), $status, null, null, $e);
         }
+    }
+
+    /**
+     * `print_r()`, `var_dump()` and Symfony's VarDumper show the configuration
+     * the way PHP shows a `#[\SensitiveParameter]` argument: VarDumper cannot
+     * hide the token in its public `apiKey`.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        return DebugInfo::mask($this, 'configuration');
     }
 }

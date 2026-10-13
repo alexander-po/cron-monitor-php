@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Client;
 
+use CronMonitor\Internal\DebugInfo;
 use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 
@@ -36,9 +37,6 @@ final class CurlException extends \RuntimeException implements NetworkExceptionI
      */
     public function __debugInfo(): array
     {
-        $properties = (array) $this;
-        $properties["\0".self::class."\0request"] = new \SensitiveParameterValue($this->request);
-
-        return $properties;
+        return DebugInfo::mask($this, 'request');
     }
 }

@@ -9,6 +9,7 @@ use CronMonitor\Client\Configuration;
 use CronMonitor\Client\CronMonitorClient;
 use CronMonitor\Tests\Support\BacktraceRecordingLogger;
 use CronMonitor\Tests\Support\RecordingHttpClient;
+use CronMonitor\Tests\Support\SecretDumpAssertions;
 use CronMonitor\Tests\Support\SecretTraceAssertions;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
@@ -19,9 +20,11 @@ use Psr\Http\Client\ClientExceptionInterface;
 
 final class MonitorQueueJobTest extends TestCase
 {
+    use SecretDumpAssertions;
     use SecretTraceAssertions;
 
     private const UUID = '00000000-0000-0000-0000-000000000000';
+    private const API_KEY = 'cmk_fake_dumped_queue_token';
 
     protected function tearDown(): void
     {
@@ -206,6 +209,16 @@ final class MonitorQueueJobTest extends TestCase
             MonitorQueueJob::class.'->handle',
             MonitorQueueJob::class.'->safePing',
         ]);
+    }
+
+    public function test_a_dumped_middleware_masks_its_uuid_and_the_token_of_its_client(): void
+    {
+        $factory = new HttpFactory();
+        $client = new CronMonitorClient(new Configuration('https://cronheart.com', apiKey: self::API_KEY), new RecordingHttpClient([]), $factory, $factory);
+        $middleware = new MonitorQueueJob($client, self::UUID);
+
+        self::assertDumpsMask($middleware, [self::UUID, self::API_KEY], ['monitorUuid']);
+        self::assertVarDumperHides($middleware, [self::UUID, self::API_KEY]);
     }
 
     private function buildMiddleware(RecordingHttpClient $http): MonitorQueueJob

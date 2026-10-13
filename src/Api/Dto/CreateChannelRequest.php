@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CronMonitor\Api\Dto;
 
+use CronMonitor\Internal\DebugInfo;
+
 /**
  * Input for `POST /api/v1/channels`.
  *
@@ -141,11 +143,6 @@ final class CreateChannelRequest
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['webhookUrl'] = new \SensitiveParameterValue($this->webhookUrl);
-        $properties['secret'] = new \SensitiveParameterValue($this->secret);
-        $properties['routingKey'] = new \SensitiveParameterValue($this->routingKey);
-
-        return $properties;
+        return DebugInfo::mask($this, 'webhookUrl', 'secret', 'routingKey');
     }
 }

@@ -20,9 +20,8 @@ final class MonitorChannelTest extends TestCase
 
     public function test_id_stays_a_string_beyond_the_php_int_range(): void
     {
-        // The backend serializes its BIGINT ids as JSON strings precisely so
-        // they survive a platform where they exceed the native int range; the
-        // DTO must not narrow them back.
+        // The API sends ids as JSON strings, so they survive a platform where
+        // they exceed the native int range; the DTO must not narrow them back.
         $channel = MonitorChannel::fromArray([
             'id' => '18446744073709551615',
             'kind' => 'slack',

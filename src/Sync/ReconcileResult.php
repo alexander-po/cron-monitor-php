@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CronMonitor\Sync;
 
+use CronMonitor\Internal\DebugInfo;
+
 /**
  * The outcome of reconciling one {@see ReconcilableJob}: what happened, and —
  * for an existing or freshly-created monitor — its UUID, or the error message
@@ -54,9 +56,6 @@ final class ReconcileResult
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['uuid'] = new \SensitiveParameterValue($this->uuid);
-
-        return $properties;
+        return DebugInfo::mask($this, 'uuid');
     }
 }

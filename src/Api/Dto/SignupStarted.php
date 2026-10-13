@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Api\Dto;
 
 use CronMonitor\Api\Internal\Hydrator;
+use CronMonitor\Internal\DebugInfo;
 
 /**
  * Result of `POST /api/v1/signup`: the backend mailed the address one
@@ -50,9 +51,6 @@ final class SignupStarted
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['deviceCode'] = new \SensitiveParameterValue($this->deviceCode);
-
-        return $properties;
+        return DebugInfo::mask($this, 'deviceCode');
     }
 }

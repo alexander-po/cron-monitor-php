@@ -29,10 +29,10 @@ use CronMonitor\Api\Internal\Hydrator;
  * *vocabulary*, not the *types*: a field of the wrong JSON type still fails
  * the read loudly, deliberately, exactly as every other hydrator here does.
  *
- * `id` is the backend's BIGINT identifier carried as a string, matching the
- * API's serialized type, and it is what {@see CreateMonitorRequest} /
- * {@see UpdateMonitorRequest} accept as a `channelIds` entry — so one
- * monitor's routing copies onto another with no conversion.
+ * `id` is the JSON string the API sends, and it is what
+ * {@see CreateMonitorRequest} / {@see UpdateMonitorRequest} accept as a
+ * `channelIds` entry — so one monitor's routing copies onto another with no
+ * conversion.
  */
 final class MonitorChannel
 {

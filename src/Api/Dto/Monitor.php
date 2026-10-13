@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CronMonitor\Api\Dto;
 
 use CronMonitor\Api\Internal\Hydrator;
+use CronMonitor\Internal\DebugInfo;
 
 /**
  * An immutable snapshot of a monitor as returned by the management API
@@ -126,11 +127,6 @@ final class Monitor
      */
     public function __debugInfo(): array
     {
-        $properties = get_object_vars($this);
-        $properties['uuid'] = new \SensitiveParameterValue($this->uuid);
-        $properties['pingUrl'] = new \SensitiveParameterValue($this->pingUrl);
-        $properties['badgeUrl'] = new \SensitiveParameterValue($this->badgeUrl);
-
-        return $properties;
+        return DebugInfo::mask($this, 'uuid', 'pingUrl', 'badgeUrl');
     }
 }
