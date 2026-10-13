@@ -62,7 +62,7 @@ use Psr\Log\NullLogger;
  */
 final class MonitorApiClient
 {
-    private const USER_AGENT = 'cron-monitor-php-sdk/1.6';
+    private const USER_AGENT = 'cron-monitor-php-sdk/1.7';
 
     private const API_PREFIX = '/api/v1';
 

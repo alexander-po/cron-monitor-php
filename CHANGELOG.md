@@ -6,6 +6,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [1.7.0] — 2026-10-14
+
+A minor release: Symfony's VarDumper (`dump()`, `dd()`) masks the API token and the monitor UUIDs the two clients, the framework bridges and the Symfony sync command hold, as `print_r()` and `var_dump()` already did, and the dumps of those objects change shape accordingly. The wire mapping is untouched.
+
 Also in this release: the masking `__debugInfo()` bodies share one internal helper, and the tests check `print_r()`, `var_dump()` and VarDumper of every class that masks a credential, including the bridges. A test pins that the ping client scrubs a monitor UUID a transport quotes in a different case than the caller passed. `symfony/var-dumper` is a direct dev dependency.
 
 ### Security
@@ -16,10 +22,14 @@ Also in this release: the masking `__debugInfo()` bodies share one internal help
 
 - **A null credential prints as `null`.** `print_r()` and `var_dump()` masked a `CreateChannelRequest` webhook URL, secret or routing key, the UUID of a `ReconcileResult` or of a `#[Monitor]` attribute even when it was null; an absent value now shows as `null`.
 
+### Upgrading
+
+- A test that compares the `print_r()` or `var_dump()` output of a client, a bridge, the sync command or a DTO with a null credential sees the new shape: the configuration masked, private properties labelled with their visibility, and `null` where a credential is absent.
+
 ### Documentation
 
 - **A retried ping is described as what it is.** The docblocks, the Laravel config, the Symfony option and the README said pings are idempotent on the server; a retry repeats the same report, so it is safe, but a ping whose response was lost or came back as a server error may be recorded once more per retry.
-- **`MonitorApiClient::testChannel()` names its `409`.** While the channel's kind is disabled or its delivery is turned off on the service, the test send is refused with `409` (`ConflictException`) and nothing is sent.
+- **`MonitorApiClient::testChannel()` names its `409`.** While the channel's kind is disabled or its delivery is turned off on the service, the test send is refused with `409` (`ConflictException`) and nothing is sent. `TestChannelResult`, `ConflictException` and the README describe the test's `502`, `409` and `422` as the API states them: a delivery that failed, a send refused while the kind or its delivery is off, and a test the service refuses as invalid, with the reason in `detail`.
 - The docblocks describe channel and ping ids, snooze windows and the ping body cap in terms of the API rather than of the service's storage, and the README's custom-endpoint example points at a self-hosted host.
 
 ## [1.6.0] — 2026-10-06
