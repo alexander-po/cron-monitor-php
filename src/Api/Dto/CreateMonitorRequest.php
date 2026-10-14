@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CronMonitor\Api\Dto;
 
+use CronMonitor\Api\Internal\DisplayName;
+
 /**
  * Input for `POST /api/v1/monitors`.
  *
@@ -31,9 +33,7 @@ final class CreateMonitorRequest
         public readonly int $graceSeconds = 60,
         public readonly array $channelIds = [],
     ) {
-        if ('' === trim($name)) {
-            throw new \InvalidArgumentException('Monitor name must be a non-empty string.');
-        }
+        DisplayName::assertMonitorName($name, 'Monitor name must be a non-empty string.');
         if ('' === trim($scheduleExpr)) {
             throw new \InvalidArgumentException('Monitor schedule expression must be a non-empty string.');
         }

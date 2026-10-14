@@ -26,6 +26,7 @@ use CronMonitor\Api\Exception\ApiTransportException;
 use CronMonitor\Api\Exception\ChannelDeliveryException;
 use CronMonitor\Api\Exception\SignupExpiredException;
 use CronMonitor\Api\Exception\UnexpectedResponseException;
+use CronMonitor\Api\Internal\DisplayName;
 use CronMonitor\Api\Internal\ExceptionFactory;
 use CronMonitor\Api\Internal\ProblemDetails;
 use CronMonitor\Api\Internal\SecretRedactor;
@@ -452,6 +453,12 @@ final class MonitorApiClient
      * which case the backend dedups the replay and the create becomes
      * retryable.
      *
+     * When the channel's kind is disabled, when an email channel's delivery is
+     * turned off on the service, or when an idempotency key is reused with a
+     * different request, the create is refused with `409`
+     * ({@see Exception\ConflictException}); a request the service refuses as
+     * invalid answers `422` ({@see Exception\ValidationException}).
+     *
      * @throws ApiException
      */
     public function createChannel(#[\SensitiveParameter] CreateChannelRequest $request, ?string $idempotencyKey = null): Channel
@@ -481,16 +488,16 @@ final class MonitorApiClient
     /**
      * Rename a channel — the label is the only mutable field (the backend's
      * policy for a destination change is delete + create). Retried: re-applying
-     * the same label is idempotent.
+     * the same label is idempotent. A label the service would refuse as
+     * invalid, as far as the SDK can tell, throws before any request.
      *
      * @throws ApiException
+     * @throws \InvalidArgumentException
      */
     public function updateChannel(string $id, string $label): Channel
     {
         $this->assertChannelId($id);
-        if ('' === trim($label)) {
-            throw new \InvalidArgumentException('Channel label must be a non-empty string.');
-        }
+        DisplayName::assertChannelLabel($label);
 
         $payload = $this->requestJson('PATCH', '/channels/'.$id, ['label' => $label], true);
 

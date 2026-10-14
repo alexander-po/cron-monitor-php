@@ -136,7 +136,7 @@ final class MonitorLifecycleApiTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         try {
-            $client->updateMonitor('not-a-uuid', new UpdateMonitorRequest(name: 'X'));
+            $client->updateMonitor('not-a-uuid', new UpdateMonitorRequest(name: 'Job'));
         } finally {
             self::assertSame([], $http->requests);
         }
@@ -150,7 +150,7 @@ final class MonitorLifecycleApiTest extends TestCase
         ]);
         $client = $this->client($http, retries: 1);
 
-        $client->updateMonitor(self::UUID, new UpdateMonitorRequest(name: 'X'));
+        $client->updateMonitor(self::UUID, new UpdateMonitorRequest(name: 'Job'));
 
         self::assertCount(2, $http->requests, 'PATCH is idempotent and must be retried');
     }

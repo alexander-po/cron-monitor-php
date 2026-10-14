@@ -206,6 +206,28 @@ final class MonitorReconcilerTest extends TestCase
         self::assertCount(3, $http->requests, 'a failed create must not abort the remaining jobs');
     }
 
+    public function test_apply_reports_a_job_name_the_service_would_refuse_as_failed_and_goes_on(): void
+    {
+        $http = new RecordingHttpClient([
+            self::listPage([]),
+            self::createdMonitor('App\\Cron\\Ok', '00000000-0000-0000-0000-000000000003'),
+        ]);
+        $reconciler = $this->reconciler($http);
+
+        $results = $reconciler->reconcile([
+            new ReconcilableJob(str_repeat('a', 121), '0 * * * *'),
+            new ReconcilableJob("App\\Cron\n\\Bad", '0 * * * *'),
+            new ReconcilableJob('App\\Cron\\Ok', '0 * * * *'),
+        ], apply: true);
+
+        self::assertSame(ReconcileOutcome::Failed, $results[0]->outcome);
+        self::assertStringContainsString('120', (string) $results[0]->error);
+        self::assertSame(ReconcileOutcome::Failed, $results[1]->outcome);
+        self::assertStringContainsString('U+000A', (string) $results[1]->error);
+        self::assertSame(ReconcileOutcome::Created, $results[2]->outcome);
+        self::assertCount(2, $http->requests);
+    }
+
     public function test_listing_failure_aborts_before_any_create(): void
     {
         $http = new RecordingHttpClient([self::json(401, ['title' => 'Unauthorized'])]);

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CronMonitor\Api\Dto;
 
+use CronMonitor\Api\Internal\DisplayName;
+
 /**
  * Input for `PATCH /api/v1/monitors/{uuid}` — a partial update.
  *
@@ -31,8 +33,8 @@ final class UpdateMonitorRequest
         public readonly ?int $graceSeconds = null,
         public readonly ?array $channelIds = null,
     ) {
-        if (null !== $name && '' === trim($name)) {
-            throw new \InvalidArgumentException('Monitor name, when provided, must be a non-empty string.');
+        if (null !== $name) {
+            DisplayName::assertMonitorName($name, 'Monitor name, when provided, must be a non-empty string.');
         }
         if (null !== $scheduleExpr && '' === trim($scheduleExpr)) {
             throw new \InvalidArgumentException('Monitor schedule expression, when provided, must be a non-empty string.');
