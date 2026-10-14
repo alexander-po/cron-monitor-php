@@ -6,6 +6,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet — open a PR and add your entry under the appropriate subsection._
+
+## [1.8.0] — 2026-10-14
+
+A minor release: the request objects refuse client-side the monitor names and channel labels the service answers with `422`, so a caller sees the refusal before any request. The failure is an `\InvalidArgumentException` from the constructor, where a `ValidationException` came from the call; see the entry below for what to catch.
+
 ### Changed
 
 - **A monitor name or a channel label the service refuses is refused before the request.** `CreateMonitorRequest`, `UpdateMonitorRequest`, `CreateChannelRequest` and `MonitorApiClient::updateChannel()` throw `\InvalidArgumentException` for a name over 120 characters or a label over 80, either under 2, and for a control character, a line break (U+2028, U+2029) or a direction override (U+202A–U+202E, U+2066–U+2069), where the service answered `422`. Length is counted in characters; the minimum is counted on the trimmed value and the maximum on the value as sent. The failure is now this exception, thrown from the constructor (from the call for `updateChannel()`), rather than a `ValidationException` from the call, so code that builds the request inside a `try` that catches only `ApiException` must also catch it; a whitespace-only name that holds a tab or a line break is now refused with the code point named rather than as empty. `cron-monitor:sync --apply` reports such a job as `failed` and goes on. The `createChannel()` docblock now names its `409` and `422`.
