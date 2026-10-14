@@ -203,7 +203,7 @@ final class MonitorApiClientTest extends TestCase
         $client = new MonitorApiClient(new Configuration('https://cronheart.com', apiKey: 'cmk_x', retries: 3), $http, $factory, $factory);
 
         try {
-            $client->createMonitor(new CreateMonitorRequest('X', ScheduleKind::Interval, '300'));
+            $client->createMonitor(new CreateMonitorRequest('Job', ScheduleKind::Interval, '300'));
             self::fail('Expected an exception.');
         } catch (UnexpectedResponseException $e) {
             self::assertSame(503, $e->statusCode);
@@ -287,6 +287,20 @@ final class MonitorApiClientTest extends TestCase
         $client->getMonitor(self::UUID);
     }
 
+    public function test_a_name_that_is_not_valid_utf8_reaches_the_transport_and_sends_nothing(): void
+    {
+        $http = new RecordingHttpClient([]);
+        $factory = new HttpFactory();
+        $client = new MonitorApiClient(new Configuration('https://cronheart.com', apiKey: 'cmk_test_token'), $http, $factory, $factory);
+
+        $this->expectException(ApiTransportException::class);
+        try {
+            $client->createMonitor(new CreateMonitorRequest("Night\xC3\x28ly", ScheduleKind::Cron, '0 2 * * *'));
+        } finally {
+            self::assertSame([], $http->requests);
+        }
+    }
+
     public function test_maps_422_to_validation_with_field_errors(): void
     {
         $client = $this->client([self::jsonResponse(422, [
@@ -295,7 +309,7 @@ final class MonitorApiClientTest extends TestCase
         ])]);
 
         try {
-            $client->createMonitor(new CreateMonitorRequest('X', ScheduleKind::Cron, 'nonsense'));
+            $client->createMonitor(new CreateMonitorRequest('Job', ScheduleKind::Cron, 'nonsense'));
             self::fail('Expected an exception.');
         } catch (ValidationException $e) {
             self::assertSame(['schedule_expr' => 'invalid cron'], $e->errors);

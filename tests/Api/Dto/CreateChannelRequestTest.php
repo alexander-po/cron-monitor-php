@@ -36,32 +36,32 @@ final class CreateChannelRequestTest extends TestCase
     public function test_slack_and_discord_use_webhook_url(): void
     {
         self::assertSame(
-            ['kind' => 'slack', 'label' => 'S', 'webhook_url' => 'https://hooks.slack.test/x'],
-            CreateChannelRequest::slack('S', 'https://hooks.slack.test/x')->toArray(),
+            ['kind' => 'slack', 'label' => 'SS', 'webhook_url' => 'https://hooks.slack.test/x'],
+            CreateChannelRequest::slack('SS', 'https://hooks.slack.test/x')->toArray(),
         );
         self::assertSame(
-            ['kind' => 'discord', 'label' => 'D', 'webhook_url' => 'https://discord.test/x'],
-            CreateChannelRequest::discord('D', 'https://discord.test/x')->toArray(),
+            ['kind' => 'discord', 'label' => 'DD', 'webhook_url' => 'https://discord.test/x'],
+            CreateChannelRequest::discord('DD', 'https://discord.test/x')->toArray(),
         );
     }
 
     public function test_teams_and_google_chat_use_webhook_url(): void
     {
         self::assertSame(
-            ['kind' => 'teams', 'label' => 'T', 'webhook_url' => 'https://example.environment.api.powerplatform.test/x'],
-            CreateChannelRequest::teams('T', 'https://example.environment.api.powerplatform.test/x')->toArray(),
+            ['kind' => 'teams', 'label' => 'TT', 'webhook_url' => 'https://example.environment.api.powerplatform.test/x'],
+            CreateChannelRequest::teams('TT', 'https://example.environment.api.powerplatform.test/x')->toArray(),
         );
         self::assertSame(
-            ['kind' => 'google_chat', 'label' => 'G', 'webhook_url' => 'https://chat.googleapis.test/v1/spaces/x/messages'],
-            CreateChannelRequest::googleChat('G', 'https://chat.googleapis.test/v1/spaces/x/messages')->toArray(),
+            ['kind' => 'google_chat', 'label' => 'GG', 'webhook_url' => 'https://chat.googleapis.test/v1/spaces/x/messages'],
+            CreateChannelRequest::googleChat('GG', 'https://chat.googleapis.test/v1/spaces/x/messages')->toArray(),
         );
     }
 
     public function test_pagerduty_carries_its_routing_key(): void
     {
         self::assertSame(
-            ['kind' => 'pagerduty', 'label' => 'P', 'routing_key' => self::ROUTING_KEY],
-            CreateChannelRequest::pagerDuty('P', self::ROUTING_KEY)->toArray(),
+            ['kind' => 'pagerduty', 'label' => 'PP', 'routing_key' => self::ROUTING_KEY],
+            CreateChannelRequest::pagerDuty('PP', self::ROUTING_KEY)->toArray(),
         );
     }
 
@@ -69,14 +69,14 @@ final class CreateChannelRequestTest extends TestCase
     {
         foreach ([ChannelKind::Teams, ChannelKind::GoogleChat, ChannelKind::PagerDuty] as $kind) {
             try {
-                new CreateChannelRequest($kind, 'X');
+                new CreateChannelRequest($kind, 'XX');
                 self::fail('Expected an exception for '.$kind->value);
             } catch (\InvalidArgumentException $e) {
                 self::assertStringContainsString($kind->value, $e->getMessage());
             }
         }
         try {
-            new CreateChannelRequest(ChannelKind::PagerDuty, 'X', routingKey: '  ');
+            new CreateChannelRequest(ChannelKind::PagerDuty, 'XX', routingKey: '  ');
             self::fail('Expected an exception for a blank routing key.');
         } catch (\InvalidArgumentException $e) {
             self::assertStringContainsString('routing_key', $e->getMessage());
@@ -85,27 +85,27 @@ final class CreateChannelRequestTest extends TestCase
 
     public function test_only_presence_of_the_routing_key_is_checked_client_side(): void
     {
-        self::assertSame('short', CreateChannelRequest::pagerDuty('P', 'short')->toArray()['routing_key']);
+        self::assertSame('short', CreateChannelRequest::pagerDuty('PP', 'short')->toArray()['routing_key']);
     }
 
     public function test_a_routing_key_is_only_valid_for_pagerduty(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new CreateChannelRequest(ChannelKind::Slack, 'X', webhookUrl: 'https://hooks.example.test/x', routingKey: self::ROUTING_KEY);
+        new CreateChannelRequest(ChannelKind::Slack, 'XX', webhookUrl: 'https://hooks.example.test/x', routingKey: self::ROUTING_KEY);
     }
 
     public function test_webhook_carries_its_required_secret(): void
     {
         self::assertSame(
-            ['kind' => 'webhook', 'label' => 'W', 'webhook_url' => 'https://hooks.example.test/x', 'secret' => 'a-shared-signing-secret'],
-            CreateChannelRequest::webhook('W', 'https://hooks.example.test/x', 'a-shared-signing-secret')->toArray(),
+            ['kind' => 'webhook', 'label' => 'WW', 'webhook_url' => 'https://hooks.example.test/x', 'secret' => 'a-shared-signing-secret'],
+            CreateChannelRequest::webhook('WW', 'https://hooks.example.test/x', 'a-shared-signing-secret')->toArray(),
         );
     }
 
     public function test_webhook_requires_a_secret(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new CreateChannelRequest(ChannelKind::Webhook, 'W', webhookUrl: 'https://hooks.example.test/x');
+        new CreateChannelRequest(ChannelKind::Webhook, 'WW', webhookUrl: 'https://hooks.example.test/x');
     }
 
     public function test_blank_label_is_rejected(): void
@@ -117,25 +117,25 @@ final class CreateChannelRequestTest extends TestCase
     public function test_email_requires_an_address(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new CreateChannelRequest(ChannelKind::Email, 'X');
+        new CreateChannelRequest(ChannelKind::Email, 'XX');
     }
 
     public function test_telegram_requires_a_chat_id(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new CreateChannelRequest(ChannelKind::Telegram, 'X');
+        new CreateChannelRequest(ChannelKind::Telegram, 'XX');
     }
 
     public function test_webhook_requires_a_url(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new CreateChannelRequest(ChannelKind::Webhook, 'X');
+        new CreateChannelRequest(ChannelKind::Webhook, 'XX');
     }
 
     public function test_secret_is_only_valid_for_a_webhook(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new CreateChannelRequest(ChannelKind::Email, 'X', address: 'me@example.test', secret: 'nope');
+        new CreateChannelRequest(ChannelKind::Email, 'XX', address: 'me@example.test', secret: 'nope');
     }
 
     public function test_a_rejected_request_keeps_the_webhook_url_and_secret_out_of_trace_arguments(): void
@@ -144,11 +144,11 @@ final class CreateChannelRequestTest extends TestCase
             [static fn () => CreateChannelRequest::slack(' ', self::WEBHOOK_URL), [self::WEBHOOK_URL]],
             [static fn () => CreateChannelRequest::discord(' ', self::WEBHOOK_URL), [self::WEBHOOK_URL]],
             [static fn () => CreateChannelRequest::webhook(' ', self::WEBHOOK_URL, self::SECRET), [self::WEBHOOK_URL, self::SECRET]],
-            [static fn () => new CreateChannelRequest(ChannelKind::Slack, 'S', webhookUrl: self::WEBHOOK_URL, secret: self::SECRET), [self::WEBHOOK_URL, self::SECRET]],
+            [static fn () => new CreateChannelRequest(ChannelKind::Slack, 'SS', webhookUrl: self::WEBHOOK_URL, secret: self::SECRET), [self::WEBHOOK_URL, self::SECRET]],
             [static fn () => CreateChannelRequest::teams(' ', self::WEBHOOK_URL), [self::WEBHOOK_URL]],
             [static fn () => CreateChannelRequest::googleChat(' ', self::WEBHOOK_URL), [self::WEBHOOK_URL]],
             [static fn () => CreateChannelRequest::pagerDuty(' ', self::ROUTING_KEY), [self::ROUTING_KEY]],
-            [static fn () => new CreateChannelRequest(ChannelKind::Slack, 'S', webhookUrl: self::WEBHOOK_URL, routingKey: self::ROUTING_KEY), [self::WEBHOOK_URL, self::ROUTING_KEY]],
+            [static fn () => new CreateChannelRequest(ChannelKind::Slack, 'SS', webhookUrl: self::WEBHOOK_URL, routingKey: self::ROUTING_KEY), [self::WEBHOOK_URL, self::ROUTING_KEY]],
         ];
 
         foreach ($rejected as [$build, $secrets]) {

@@ -78,7 +78,7 @@ final class IdempotencyKeyApiTest extends TestCase
         $client = $this->client($http);
 
         try {
-            $client->createMonitor(new CreateMonitorRequest('X', ScheduleKind::Interval, '300'));
+            $client->createMonitor(new CreateMonitorRequest('Job', ScheduleKind::Interval, '300'));
             self::fail('Expected an exception.');
         } catch (\Throwable) {
         }
@@ -96,7 +96,7 @@ final class IdempotencyKeyApiTest extends TestCase
         $client = $this->client($http, retries: 1);
 
         $monitor = $client->createMonitor(
-            new CreateMonitorRequest('X', ScheduleKind::Interval, '300'),
+            new CreateMonitorRequest('Job', ScheduleKind::Interval, '300'),
             'idem-key-abc',
         );
 
@@ -133,7 +133,7 @@ final class IdempotencyKeyApiTest extends TestCase
         $client = $this->client($http);
 
         try {
-            $client->createChannel(CreateChannelRequest::email('X', 'me@example.test'));
+            $client->createChannel(CreateChannelRequest::email('Inbox', 'me@example.test'));
             self::fail('Expected an exception.');
         } catch (\Throwable) {
         }
@@ -149,7 +149,7 @@ final class IdempotencyKeyApiTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         try {
-            $client->createMonitor(new CreateMonitorRequest('X', ScheduleKind::Interval, '300'), '   ');
+            $client->createMonitor(new CreateMonitorRequest('Job', ScheduleKind::Interval, '300'), '   ');
         } finally {
             self::assertSame([], $http->requests);
         }
@@ -162,7 +162,7 @@ final class IdempotencyKeyApiTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         try {
-            $client->createMonitor(new CreateMonitorRequest('X', ScheduleKind::Interval, '300'), "key\r\nX-Injected: 1");
+            $client->createMonitor(new CreateMonitorRequest('Job', ScheduleKind::Interval, '300'), "key\r\nX-Injected: 1");
         } finally {
             self::assertSame([], $http->requests);
         }
@@ -179,7 +179,7 @@ final class IdempotencyKeyApiTest extends TestCase
         $client = $this->client($http);
 
         try {
-            $client->createMonitor(new CreateMonitorRequest('X', ScheduleKind::Interval, '300'), 'reused-key');
+            $client->createMonitor(new CreateMonitorRequest('Job', ScheduleKind::Interval, '300'), 'reused-key');
             self::fail('Expected an exception.');
         } catch (ConflictException $e) {
             self::assertSame(409, $e->statusCode);

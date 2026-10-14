@@ -83,7 +83,7 @@ final class MonitorReconciler
                 $monitor = $this->create($job, $channelId, $graceSeconds);
                 $existing[$job->name] = $monitor->uuid;
                 $results[] = ReconcileResult::created($job, $monitor->uuid);
-            } catch (ApiException $e) {
+            } catch (ApiException|\InvalidArgumentException $e) {
                 $results[] = ReconcileResult::failed($job, $e->getMessage());
             }
         }

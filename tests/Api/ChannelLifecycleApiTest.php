@@ -140,7 +140,7 @@ final class ChannelLifecycleApiTest extends TestCase
         $client = $this->client($http, retries: 3);
 
         try {
-            $client->createChannel(CreateChannelRequest::email('X', 'me@example.test'));
+            $client->createChannel(CreateChannelRequest::email('Inbox', 'me@example.test'));
             self::fail('Expected an exception.');
         } catch (UnexpectedResponseException $e) {
             self::assertSame(503, $e->statusCode);
@@ -283,6 +283,30 @@ final class ChannelLifecycleApiTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         try {
             $client->updateChannel('7', '   ');
+        } finally {
+            self::assertSame([], $http->requests);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function refusedLabels(): iterable
+    {
+        yield 'direction override' => ["Ops\u{202E}box"];
+        yield 'one character' => ['x'];
+        yield 'over 80 characters' => [str_repeat('a', 81)];
+    }
+
+    #[DataProvider('refusedLabels')]
+    public function test_update_channel_refuses_a_label_the_service_refuses_without_http(string $label): void
+    {
+        $http = new RecordingHttpClient([]);
+        $client = $this->client($http);
+
+        $this->expectException(\InvalidArgumentException::class);
+        try {
+            $client->updateChannel('7', $label);
         } finally {
             self::assertSame([], $http->requests);
         }

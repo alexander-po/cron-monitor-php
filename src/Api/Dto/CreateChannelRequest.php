@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Api\Dto;
 
+use CronMonitor\Api\Internal\DisplayName;
 use CronMonitor\Internal\DebugInfo;
 
 /**
@@ -35,9 +36,7 @@ final class CreateChannelRequest
         #[\SensitiveParameter]
         public readonly ?string $routingKey = null,
     ) {
-        if ('' === trim($label)) {
-            throw new \InvalidArgumentException('Channel label must be a non-empty string.');
-        }
+        DisplayName::assertChannelLabel($label);
 
         [$field, $value] = match ($kind) {
             ChannelKind::Email => ['address', $address],
