@@ -14,9 +14,10 @@ dependencies, first-class Symfony Scheduler + Messenger and Laravel
 Scheduler bridges.
 
 Source of truth for the wire contract — ping URL shape, body cap, action
-regex, accepted HTTP responses — is the cron-monitor backend (the private
-service repo: its ping controller and `Ping` entity). When you change either
-side, update both.
+set, accepted HTTP responses — is the cron-monitor service (a separate,
+private repository) and its public OpenAPI at
+https://cronheart.com/api/v1/openapi.json. When you change either side,
+update both.
 
 Release history lives in `CHANGELOG.md`, not in this file.
 
@@ -125,27 +126,27 @@ callback without booting a container. See
 
 ## Wire contract anchors
 
-These constants and regex are anchored to the backend. If you change one
-side, change the other in the same PR (cross-repo, separately reviewed).
-The backend lives in its own private repo, so its column names the concept,
-not a file path:
+These constants and regex are anchored to the service's wire contract. If
+you change one side, change the other in the same PR (cross-repo, separately
+reviewed). The service lives in its own private repo, so the anchor column
+names the wire behaviour, not a file path:
 
-| Item                  | SDK location                                | Backend anchor                                            |
+| Item                  | SDK location                                | Service anchor (wire terms)                               |
 |-----------------------|---------------------------------------------|-----------------------------------------------------------|
-| `BODY_CAP_BYTES`      | `src/Client/CronMonitorClient.php` (10 000) | backend `Ping` entity body-excerpt cap (10 000)           |
-| Action set            | `src/Client/Configuration.php` (`run/start/success/ok/fail`, case-insensitive, or 1–16 digits) | backend ping action route (the same fixed set; other segments 404 and store no ping) |
-| UUID validation       | `src/Client/Configuration.php` (canonical) | backend ping route (`{36}` hex)                           |
+| `BODY_CAP_BYTES`      | `src/Client/CronMonitorClient.php` (10 000) | the ping body the service keeps, up to 10 000 bytes       |
+| Action set            | `src/Client/Configuration.php` (`run/start/success/ok/fail`, case-insensitive, or 1–16 digits) | the ping path's action segment (the same fixed set; other segments 404 and store no ping) |
+| UUID validation       | `src/Client/Configuration.php` (canonical) | the ping path takes a canonical 36-character UUID         |
 | Default endpoint      | `src/Client/Configuration.php`              | production host (`cronheart.com`)                         |
-| Snooze durations      | `src/Api/Dto/SnoozeDuration.php` (`1h/4h/1d/1w`) | backend `SnoozeDuration` enum                        |
-| Channel kinds         | `src/Api/Dto/ChannelKind.php` (request-side) | backend `ChannelKind` enum                              |
-| Plan keys             | `src/Api/Dto/PlanKey.php` (`free/starter/growth/scale`) | backend `Plan` enum                          |
-| BIGINT ids as strings | `Ping`/`Alert`/`Channel`/`MonitorChannel` `$id` (`string`) | backend serialises Doctrine BIGINT `getId()` as JSON string |
-| Monitor alert routing | `Monitor::$channels` → `MonitorChannel` (`id`/`kind`/`label`) | backend embeds the same slim projection in its monitor payload, ordered by channel id; older deployments omit the key, so hydration tolerates it missing or null |
-| 204 / 502 contract    | `requestNoContent()` (204); generic 502 → `UnexpectedResponseException`, `testChannel()` 502 → `ChannelDeliveryException` (subclass) | backend DELETE routes; channel-test bad-gateway (502) |
-| `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | backend idempotency guard (full-body fingerprint)         |
-| Log digest for a UUID | `CronMonitorClient::hashUuid()` (`substr(sha256(lowercased uuid), 0, 16)`) | the same truncated digest the backend logs — the two streams join on it, so the input form must stay identical on both sides |
-| Terminal signup       | `startSignup()` (202 → `SignupStarted`); `pollSignupToken()` (202 → `null`, 200 → `SignupToken`, 410 → `SignupExpiredException`, 429 → `RateLimitException`); no bearer token, HTTPS only | backend signup + signup-token endpoints (`accept_terms` must be `true`; the token is returned once) |
-| Token alphabet        | `SecretRedactor::API_KEY_PATTERN` (`cmk_[A-Za-z0-9_-]+`): what the redactor strips and what `cron-monitor signup` agrees to write into an env line | the backend's token format (a `cmk_` token must stay inside that alphabet) |
+| Snooze durations      | `src/Api/Dto/SnoozeDuration.php` (`1h/4h/1d/1w`) | the snooze `duration` values in the OpenAPI          |
+| Channel kinds         | `src/Api/Dto/ChannelKind.php` (request-side) | the channel `kind` values in the OpenAPI                |
+| Plan keys             | `src/Api/Dto/PlanKey.php` (`free/starter/growth/scale`) | the plan `key` values the account endpoint returns |
+| Integer ids as strings | `Ping`/`Alert`/`Channel`/`MonitorChannel` `$id` (`string`) | the API sends these ids as JSON strings |
+| Monitor alert routing | `Monitor::$channels` → `MonitorChannel` (`id`/`kind`/`label`) | the service embeds the same slim projection in its monitor payload, ordered by channel id; older deployments omit the key, so hydration tolerates it missing or null |
+| 204 / 502 contract    | `requestNoContent()` (204); generic 502 → `UnexpectedResponseException`, `testChannel()` 502 → `ChannelDeliveryException` (subclass) | the API's DELETE routes; the channel test's bad gateway (502) |
+| `Idempotency-Key`     | `MonitorApiClient::idempotency()` header    | a replay with a different body under the same key is a 409 |
+| Log digest for a UUID | `CronMonitorClient::hashUuid()` (`substr(sha256(lowercased uuid), 0, 16)`) | the same truncated digest the service logs — the two streams join on it, so the input form must stay identical on both sides |
+| Terminal signup       | `startSignup()` (202 → `SignupStarted`); `pollSignupToken()` (202 → `null`, 200 → `SignupToken`, 410 → `SignupExpiredException`, 429 → `RateLimitException`); no bearer token, HTTPS only | the service's signup + signup-token endpoints (`accept_terms` must be `true`; the token is returned once) |
+| Token alphabet        | `SecretRedactor::API_KEY_PATTERN` (`cmk_[A-Za-z0-9_-]+`): what the redactor strips and what `cron-monitor signup` agrees to write into an env line | the service's token format (a `cmk_` token must stay inside that alphabet) |
 
 ## What this SDK does NOT do
 
