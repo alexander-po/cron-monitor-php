@@ -412,6 +412,11 @@ try {
 }
 ```
 
+The request objects, and `updateChannel()`, check a monitor name (2–120
+characters) and a channel label (2–80) themselves: a value with a control character, a line break or a
+direction override, or outside those lengths, throws `\InvalidArgumentException`
+from the constructor (from the call for `updateChannel()`), before any request, where the service would answer `422`.
+
 In Symfony the client is autowired (`MonitorApiClient`); in Laravel it
 is a container singleton (`app(MonitorApiClient::class)`). Both read the
 token from the same `api_key` config you already set.
