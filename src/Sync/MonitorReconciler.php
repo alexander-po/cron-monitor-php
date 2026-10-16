@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace CronMonitor\Sync;
 
 use CronMonitor\Api\Dto\CreateMonitorRequest;
-use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\ScheduleKind;
 use CronMonitor\Api\Exception\ApiException;
 use CronMonitor\Api\MonitorApiClient;
@@ -18,7 +17,9 @@ use CronMonitor\Api\MonitorApiClient;
  * Reconciliation is **by name**: every existing monitor is indexed by its
  * `name`, and a job whose name already maps to a monitor is left alone. A job
  * with no matching monitor is created (when `--apply` is on) as a cron monitor
- * named after the job. The by-name contract is simple and predictable, but it
+ * named after the job; a dry run builds the same request, so a job whose
+ * request would be refused before it is sent is reported as failed there too.
+ * The by-name contract is simple and predictable, but it
  * means renaming a scheduled job creates a second monitor rather than updating
  * the first — callers should rename on the dashboard too, or delete the orphan.
  *
@@ -73,14 +74,16 @@ final class MonitorReconciler
                 continue;
             }
 
-            if (!$apply) {
-                $results[] = ReconcileResult::wouldCreate($job);
-
-                continue;
-            }
-
             try {
-                $monitor = $this->create($job, $channelId, $graceSeconds);
+                $request = $this->request($job, $channelId, $graceSeconds);
+
+                if (!$apply) {
+                    $results[] = ReconcileResult::wouldCreate($job);
+
+                    continue;
+                }
+
+                $monitor = $this->client->createMonitor($request, $this->idempotencyKey($request));
                 $existing[$job->name] = $monitor->uuid;
                 $results[] = ReconcileResult::created($job, $monitor->uuid);
             } catch (ApiException|\InvalidArgumentException $e) {
@@ -107,11 +110,11 @@ final class MonitorReconciler
     }
 
     /**
-     * @throws ApiException
+     * @throws \InvalidArgumentException when the service would refuse the job's name or the other fields
      */
-    private function create(ReconcilableJob $job, ?string $channelId, int $graceSeconds): Monitor
+    private function request(ReconcilableJob $job, ?string $channelId, int $graceSeconds): CreateMonitorRequest
     {
-        $request = new CreateMonitorRequest(
+        return new CreateMonitorRequest(
             $job->name,
             ScheduleKind::Cron,
             $job->cronExpr,
@@ -119,8 +122,6 @@ final class MonitorReconciler
             graceSeconds: $graceSeconds,
             channelIds: null === $channelId ? [] : [$channelId],
         );
-
-        return $this->client->createMonitor($request, $this->idempotencyKey($request));
     }
 
     /**

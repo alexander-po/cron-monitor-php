@@ -6,7 +6,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet — open a PR and add your entry under the appropriate subsection._
+### Fixed
+
+- **`cron-monitor:sync --dry-run` reports a job the service would refuse as `failed`.** The dry run built no request, so a job name that `--apply` refuses before any request (over 120 characters, or holding a control character or a line break) showed as `would-create`. It now builds the same request and prints the same reason as `--apply` (so a field other than the name that the request refuses, such as an invalid `--channel`, fails the row too), still without sending anything.
 
 ## [1.8.0] — 2026-10-14
 
