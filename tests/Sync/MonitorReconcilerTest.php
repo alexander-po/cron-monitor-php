@@ -228,6 +228,48 @@ final class MonitorReconcilerTest extends TestCase
         self::assertCount(2, $http->requests);
     }
 
+    public function test_dry_run_reports_a_refused_job_name_as_failed_without_a_request(): void
+    {
+        $http = new RecordingHttpClient([self::listPage([])]);
+        $reconciler = $this->reconciler($http);
+
+        $results = $reconciler->reconcile([
+            new ReconcilableJob(str_repeat('a', 121), '0 * * * *'),
+            new ReconcilableJob("App\\Cron\n\\Bad", '0 * * * *'),
+            new ReconcilableJob('App\\Cron\\Ok', '0 * * * *'),
+        ], apply: false);
+
+        self::assertSame(ReconcileOutcome::Failed, $results[0]->outcome);
+        self::assertStringContainsString('120', (string) $results[0]->error);
+        self::assertSame(ReconcileOutcome::Failed, $results[1]->outcome);
+        self::assertStringContainsString('U+000A', (string) $results[1]->error);
+        self::assertSame(ReconcileOutcome::WouldCreate, $results[2]->outcome);
+        self::assertCount(1, $http->requests, 'a dry run lists once and writes nothing');
+    }
+
+    public function test_dry_run_and_apply_agree_on_a_refused_and_on_a_valid_name(): void
+    {
+        $jobs = [
+            new ReconcilableJob(str_repeat('a', 121), '0 * * * *'),
+            new ReconcilableJob("App\\Cron\n\\Bad", '0 * * * *'),
+            new ReconcilableJob('App\\Cron\\Ok', '0 * * * *'),
+        ];
+
+        $dry = $this->reconciler(new RecordingHttpClient([self::listPage([])]))->reconcile($jobs, apply: false);
+        $applied = $this->reconciler(new RecordingHttpClient([
+            self::listPage([]),
+            self::createdMonitor('App\\Cron\\Ok', '00000000-0000-0000-0000-000000000003'),
+        ]))->reconcile($jobs, apply: true);
+
+        foreach ([0, 1] as $i) {
+            self::assertSame(ReconcileOutcome::Failed, $dry[$i]->outcome);
+            self::assertSame($applied[$i]->outcome, $dry[$i]->outcome);
+            self::assertSame($applied[$i]->error, $dry[$i]->error);
+        }
+        self::assertSame(ReconcileOutcome::WouldCreate, $dry[2]->outcome);
+        self::assertSame(ReconcileOutcome::Created, $applied[2]->outcome);
+    }
+
     public function test_listing_failure_aborts_before_any_create(): void
     {
         $http = new RecordingHttpClient([self::json(401, ['title' => 'Unauthorized'])]);
