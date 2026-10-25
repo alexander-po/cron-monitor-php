@@ -38,7 +38,7 @@ final class Configuration implements ConfigurationInterface
                     ->defaultValue(ClientConfiguration::DEFAULT_RETRIES)
                     ->min(0)
                     ->max(5)
-                    ->info('Per-ping retry budget. A ping whose response was lost or came back as a server error may be recorded once more per retry.')
+                    ->info('Per-ping retry budget, at most 2 take effect. A ping whose response was lost or came back as a server error may be recorded once more per retry.')
                 ->end()
                 ->scalarNode('api_key')
                     ->defaultNull()

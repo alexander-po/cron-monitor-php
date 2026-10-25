@@ -33,14 +33,15 @@ final class Configuration
     public const DEFAULT_TIMEOUT_SECONDS = 5.0;
 
     /**
-     * Per-ping retry budget. A retry repeats the same report, so it is safe,
+     * Per-ping retry budget; a ping makes at most three attempts whatever
+     * this is set to. A retry repeats the same report, so it is safe,
      * though a ping whose response was lost or came back as a server error
      * may be recorded once more per retry; we default to a small budget
      * because the scheduler context typically has its own timeout (e.g. a
      * Symfony Messenger middleware), and stacking retries on top of that
      * turns a single late job into a 30 s stall.
      */
-    public const DEFAULT_RETRIES = 1;
+    public const DEFAULT_RETRIES = 2;
 
     public function __construct(
         public readonly string $endpoint,
