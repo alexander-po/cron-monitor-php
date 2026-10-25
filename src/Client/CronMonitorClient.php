@@ -25,9 +25,13 @@ use Psr\Log\NullLogger;
  *  - body is bounded to 10 KB before sending. The server enforces a 10 KB
  *    cap server-side, but truncating client-side avoids paying egress cost
  *    on the inevitable enthusiastic user who tries to send 5 MB of stdout.
- *  - retries are bounded by `Configuration::retries`. A retry repeats the
- *    same report, so it is safe; a ping whose response was lost or came
- *    back as a server error may be recorded once more per retry.
+ *  - retries are bounded by `Configuration::retries` (two by default, three
+ *    attempts in all). A 503, another 5xx answer and a transport error
+ *    are retried; a 4xx never is. A 503 `Retry-After` is honoured, capped at
+ *    five seconds a wait, and all waits together stay inside the configured
+ *    timeout (each attempt keeps its own transport timeout on top). A retry
+ *    repeats the same report, so it is safe; a ping whose response was lost or
+ *    came back as a server error may be recorded once more per retry.
  */
 final class CronMonitorClient
 {
@@ -41,20 +45,35 @@ final class CronMonitorClient
 
     private const USER_AGENT = 'cron-monitor-php-sdk/1.8';
 
+    private const MAX_WAIT_SECONDS = 5.0;
+
+    private const BACKOFF_STEP_SECONDS = 0.25;
+
     private const TRUNCATION_MARKER = "\n[truncated by SDK]";
 
     private const API_KEY_PATTERN = 'cmk_[A-Za-z0-9_-]+';
 
     private readonly LoggerInterface $logger;
 
+    /** @var \Closure(float): void */
+    private readonly \Closure $sleep;
+
+    /**
+     * @param (\Closure(float): void)|null $sleep waits the given seconds between attempts;
+     *                                            defaults to `usleep`, replaced in tests
+     */
     public function __construct(
         private readonly Configuration $configuration,
         private readonly ClientInterface $httpClient,
         private readonly RequestFactoryInterface $requestFactory,
         private readonly StreamFactoryInterface $streamFactory,
         ?LoggerInterface $logger = null,
+        ?\Closure $sleep = null,
     ) {
         $this->logger = $logger ?? new NullLogger();
+        $this->sleep = $sleep ?? static function (float $seconds): void {
+            usleep((int) ($seconds * 1_000_000));
+        };
     }
 
     /**
@@ -172,9 +191,13 @@ final class CronMonitorClient
         $maxAttempts = $this->configuration->retries + 1;
         $lastError = null;
         $lastStatus = null;
+        $waited = 0.0;
 
         for ($attempt = 1; $attempt <= $maxAttempts; ++$attempt) {
             try {
+                if ($attempt > 1 && $request->getBody()->isSeekable()) {
+                    $request->getBody()->rewind();
+                }
                 $response = $this->httpClient->sendRequest($request);
                 $status = $response->getStatusCode();
                 if ($status >= 200 && $status < 300) {
@@ -187,9 +210,20 @@ final class CronMonitorClient
                 }
                 $lastStatus = $status;
                 $lastError = \sprintf('HTTP %d', $status);
+                // A redirect or an informational answer will not change on a
+                // second try, so only a server error is worth another attempt.
+                if ($status < 500) {
+                    return PingResult::failed($status, $lastError, $attempt);
+                }
+                $retryAfter = 503 === $status ? self::retryAfterSeconds($response->getHeaderLine('Retry-After')) : null;
             } catch (\Throwable $e) {
                 $lastError = self::scrub($e->getMessage(), $monitorUuid);
                 $lastStatus = null;
+                $retryAfter = null;
+            }
+
+            if ($attempt < $maxAttempts) {
+                $waited += $this->pause($retryAfter, $attempt, $waited);
             }
         }
 
@@ -202,6 +236,42 @@ final class CronMonitorClient
         ]);
 
         return PingResult::failed($lastStatus, $lastError ?? 'unknown error', $maxAttempts);
+    }
+
+    /**
+     * Seconds to wait, or null for the default backoff. Only the delta-seconds
+     * form is read; an HTTP date, a negative or a non-numeric value is ignored.
+     */
+    private static function retryAfterSeconds(string $header): ?float
+    {
+        $header = trim($header);
+        if (1 !== preg_match('/^[0-9]+$/D', $header)) {
+            return null;
+        }
+
+        return (float) $header;
+    }
+
+    /**
+     * Sleeps before the next attempt and returns the seconds waited. One wait
+     * is capped at five seconds, and the waits together at the configured
+     * timeout. Each attempt keeps its own transport timeout on top, so the longest
+     * ping is every attempt's timeout plus those waits.
+     */
+    private function pause(?float $retryAfter, int $attempt, float $waited): float
+    {
+        $wait = $retryAfter ?? self::BACKOFF_STEP_SECONDS * $attempt;
+        $wait = min($wait, self::MAX_WAIT_SECONDS, $this->configuration->timeoutSeconds - $waited);
+        if ($wait <= 0.0) {
+            return 0.0;
+        }
+
+        try {
+            ($this->sleep)($wait);
+        } catch (\Throwable) {
+        }
+
+        return $wait;
     }
 
     /**

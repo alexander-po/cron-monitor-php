@@ -158,6 +158,8 @@ final class CronMonitorClientTest extends TestCase
             $factory,
             $factory,
             $logger,
+            static function (float $seconds): void {
+            },
         );
 
         $result = $client->heartbeat(self::UUID);
@@ -174,6 +176,238 @@ final class CronMonitorClientTest extends TestCase
             static fn (array $r) => 'warning' === $r['level'],
         );
         self::assertCount(1, $warnings);
+    }
+
+    /**
+     * @param list<\Psr\Http\Message\ResponseInterface|\Throwable> $queue
+     * @param list<float>                                          $slept
+     *
+     * @return array{CronMonitorClient, RecordingHttpClient}
+     */
+    private function retryingClient(array $queue, array &$slept, int $retries = 2, float $timeout = 5.0): array
+    {
+        $http = new RecordingHttpClient($queue);
+        $factory = new HttpFactory();
+        $client = new CronMonitorClient(
+            new Configuration('https://cronheart.com', $timeout, $retries),
+            $http,
+            $factory,
+            $factory,
+            null,
+            static function (float $seconds) use (&$slept): void {
+                $slept[] = $seconds;
+            },
+        );
+
+        return [$client, $http];
+    }
+
+    public function test_503_is_retried_honouring_retry_after_and_delivers(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([
+            new Response(503, ['Retry-After' => '1']),
+            new Response(503, ['Retry-After' => '2']),
+            new Response(200),
+        ], $slept);
+
+        $result = $client->success(self::UUID, 'ok');
+
+        self::assertTrue($result->delivered);
+        self::assertSame(3, $result->attempts);
+        self::assertSame([1.0, 2.0], $slept);
+        self::assertSame(['ok', 'ok', 'ok'], $http->bodies);
+    }
+
+    public function test_retry_after_is_capped_at_five_seconds_a_wait(): void
+    {
+        $slept = [];
+        [$client] = $this->retryingClient([
+            new Response(503, ['Retry-After' => '120']),
+            new Response(200),
+        ], $slept, timeout: 30.0);
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+        self::assertSame([5.0], $slept);
+    }
+
+    public function test_waits_together_stay_inside_the_timeout(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([
+            new Response(503, ['Retry-After' => '4']),
+            new Response(503, ['Retry-After' => '4']),
+            new Response(503),
+        ], $slept, timeout: 5.0);
+
+        $result = $client->heartbeat(self::UUID);
+
+        self::assertFalse($result->delivered);
+        self::assertSame([4.0, 1.0], $slept);
+        self::assertLessThanOrEqual(5.0, array_sum($slept));
+        self::assertCount(3, $http->requests);
+    }
+
+    public function test_a_configured_retry_count_is_honoured_beyond_the_default(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([
+            new Response(500), new Response(502), new Response(500), new Response(500), new Response(500), new Response(200),
+        ], $slept, retries: 4, timeout: 30.0);
+
+        $result = $client->heartbeat(self::UUID);
+
+        self::assertFalse($result->delivered);
+        self::assertSame(5, $result->attempts);
+        self::assertCount(5, $http->requests);
+    }
+
+    public function test_a_transport_error_is_retried_then_delivers(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([
+            new class('timed out') extends \RuntimeException implements ClientExceptionInterface {},
+            new Response(200),
+        ], $slept);
+
+        $result = $client->heartbeat(self::UUID);
+
+        self::assertTrue($result->delivered);
+        self::assertSame(2, $result->attempts);
+        self::assertCount(2, $http->requests);
+        self::assertCount(1, $slept);
+    }
+
+    public function test_a_throwing_sleep_does_not_break_the_ping(): void
+    {
+        $http = new RecordingHttpClient([new Response(503), new Response(200)]);
+        $factory = new HttpFactory();
+        $client = new CronMonitorClient(
+            new Configuration('https://cronheart.com'),
+            $http,
+            $factory,
+            $factory,
+            null,
+            static function (float $seconds): void {
+                throw new \Error('sleep broke');
+            },
+        );
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+    }
+
+    public function test_the_default_backoff_steps_and_a_retry_after_that_is_not_whole_seconds_are_used(): void
+    {
+        foreach (['Tue, 03 Nov 2026 08:00:00 GMT', '1.5', '-1', '1, 2', ''] as $header) {
+            $slept = [];
+            [$client] = $this->retryingClient([
+                new Response(503, '' === $header ? [] : ['Retry-After' => $header]),
+                new Response(503, '' === $header ? [] : ['Retry-After' => $header]),
+                new Response(200),
+            ], $slept);
+
+            self::assertTrue($client->heartbeat(self::UUID)->delivered, $header);
+            self::assertSame([0.25, 0.5], $slept, $header);
+        }
+    }
+
+    public function test_retry_after_is_ignored_on_a_5xx_other_than_503(): void
+    {
+        $slept = [];
+        [$client] = $this->retryingClient([new Response(502, ['Retry-After' => '4']), new Response(200)], $slept);
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+        self::assertSame([0.25], $slept);
+    }
+
+    public function test_one_retry_makes_two_attempts_and_one_wait(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(500), new Response(500)], $slept, retries: 1);
+
+        self::assertSame(2, $client->heartbeat(self::UUID)->attempts);
+        self::assertCount(2, $http->requests);
+        self::assertSame([0.25], $slept);
+    }
+
+    public function test_a_redirect_is_not_retried(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(301)], $slept);
+
+        self::assertSame(301, $client->heartbeat(self::UUID)->statusCode);
+        self::assertCount(1, $http->requests);
+        self::assertSame([], $slept);
+    }
+
+    public function test_a_huge_retry_after_is_capped_not_discarded(): void
+    {
+        $slept = [];
+        [$client] = $this->retryingClient([new Response(503, ['Retry-After' => '12345678901']), new Response(200)], $slept, timeout: 30.0);
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+        self::assertSame([5.0], $slept);
+    }
+
+    public function test_retry_after_zero_retries_without_sleeping(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(503, ['Retry-After' => '0']), new Response(200)], $slept);
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+        self::assertCount(2, $http->requests);
+        self::assertSame([], $slept);
+    }
+
+    public function test_an_informational_answer_is_not_retried(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(100)], $slept);
+
+        self::assertSame(100, $client->heartbeat(self::UUID)->statusCode);
+        self::assertCount(1, $http->requests);
+        self::assertSame([], $slept);
+    }
+
+    public function test_the_first_attempt_is_sent_when_the_body_stream_cannot_rewind(): void
+    {
+        $http = new RecordingHttpClient([new Response(200)]);
+        $factory = new HttpFactory();
+        $streams = new class implements \Psr\Http\Message\StreamFactoryInterface {
+            public function createStream(string $content = ''): \Psr\Http\Message\StreamInterface
+            {
+                return new \GuzzleHttp\Psr7\NoSeekStream(\GuzzleHttp\Psr7\Utils::streamFor($content));
+            }
+
+            public function createStreamFromFile(string $filename, string $mode = 'r'): \Psr\Http\Message\StreamInterface
+            {
+                throw new \LogicException('unused');
+            }
+
+            public function createStreamFromResource($resource): \Psr\Http\Message\StreamInterface
+            {
+                throw new \LogicException('unused');
+            }
+        };
+        $client = new CronMonitorClient(new Configuration('https://cronheart.com'), $http, $factory, $streams);
+
+        $result = $client->success(self::UUID, 'done');
+
+        self::assertTrue($result->delivered);
+        self::assertSame(1, $result->attempts);
+        self::assertSame(['done'], $http->bodies);
+    }
+
+    public function test_a_4xx_is_never_retried_whatever_the_budget(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(429, ['Retry-After' => '1'])], $slept);
+
+        $result = $client->heartbeat(self::UUID);
+
+        self::assertSame(429, $result->statusCode);
+        self::assertCount(1, $http->requests);
+        self::assertSame([], $slept);
     }
 
     public function test_network_exception_is_swallowed_into_failed_result(): void

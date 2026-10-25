@@ -50,7 +50,7 @@ Five keys, the same on both frameworks:
 | --- | --- | --- |
 | `endpoint` | `https://cronheart.com` | the target is another install (staging, self-hosted) |
 | `timeout_seconds` | `5.0` | leave it; a ping must not lengthen the job |
-| `retries` | `1` | leave it |
+| `retries` | `2` | leave it |
 | `api_key` | `null` | steps 5 and 6 need it (`cron-monitor:sync --dry-run` / `--apply`, the management client); pings never do |
 | `allow_insecure_endpoint` | `false` | `http://` endpoints only; refused together with `api_key` |
 

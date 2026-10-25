@@ -124,7 +124,7 @@ Configure:
 cron_monitor:
     endpoint:        '%env(CRON_MONITOR_ENDPOINT)%'  # optional, defaults to SaaS
     timeout_seconds: 5.0
-    retries:         1
+    retries:         2
     api_key:         '%env(CRON_MONITOR_API_KEY)%'   # optional
     messages:
         # FQCN of any message your Scheduler dispatches via Messenger.
@@ -633,7 +633,7 @@ zone, set the monitor's timezone on the dashboard after creating it.
 |----------------------------|--------------------------|-------|
 | `endpoint`                 | `https://cronheart.com`  | Self-hosted: point at your install. |
 | `timeout_seconds`          | `5.0`                    | Per-request, low by design. |
-| `retries`                  | `1`                      | A ping whose response was lost or came back as a server error may be recorded once more per retry. |
+| `retries`                  | `2`                      | A ping answered 503 (its `Retry-After` honoured, up to 5 s a wait), another 5xx, or lost to a network error is retried; a 4xx never is. The default makes three attempts. A retry may record a ping once more. |
 | `api_key`                  | `null`                   | Personal Access Token (`cmk_…`) for the management API, issued on every plan; not needed for pings. |
 | `allow_insecure_endpoint`  | `false`                  | Required for `http://` endpoints. Refused outright when `api_key` is set. |
 
@@ -701,7 +701,7 @@ Claude Code loads it as a skill when the `add-cronheart` folder is copied into
 the application's `.claude/skills/`; any other agent can be pointed at the
 file. The recipe carries placeholder UUIDs and tokens only, and the test suite
 checks that every command it names is one the bundle registers. `skills/` and
-`AGENTS.md` are repository content: `.gitattributes` marks both `export-ignore`,
+`AGENTS.md` are repository content (as are the tests and the lint and CI configuration): `.gitattributes` marks them `export-ignore`,
 so a `composer require` install (which downloads the VCS host's archive of the
 tagged commit) never receives them.
 

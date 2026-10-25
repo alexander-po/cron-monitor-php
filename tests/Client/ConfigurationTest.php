@@ -28,7 +28,7 @@ final class ConfigurationTest extends TestCase
 
         self::assertSame('https://cronheart.com', $config->endpoint);
         self::assertSame(5.0, $config->timeoutSeconds);
-        self::assertSame(1, $config->retries);
+        self::assertSame(2, $config->retries);
         self::assertNull($config->apiKey);
     }
 
