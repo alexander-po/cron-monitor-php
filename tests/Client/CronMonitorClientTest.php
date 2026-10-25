@@ -248,18 +248,18 @@ final class CronMonitorClientTest extends TestCase
         self::assertCount(3, $http->requests);
     }
 
-    public function test_a_larger_retry_setting_still_makes_at_most_three_attempts(): void
+    public function test_a_configured_retry_count_is_honoured_beyond_the_default(): void
     {
         $slept = [];
         [$client, $http] = $this->retryingClient([
-            new Response(500), new Response(502), new Response(500), new Response(200),
-        ], $slept, retries: 5, timeout: 30.0);
+            new Response(500), new Response(502), new Response(500), new Response(500), new Response(500), new Response(200),
+        ], $slept, retries: 4, timeout: 30.0);
 
         $result = $client->heartbeat(self::UUID);
 
         self::assertFalse($result->delivered);
-        self::assertSame(3, $result->attempts);
-        self::assertCount(3, $http->requests);
+        self::assertSame(5, $result->attempts);
+        self::assertCount(5, $http->requests);
     }
 
     public function test_a_transport_error_is_retried_then_delivers(): void

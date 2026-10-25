@@ -25,8 +25,8 @@ use Psr\Log\NullLogger;
  *  - body is bounded to 10 KB before sending. The server enforces a 10 KB
  *    cap server-side, but truncating client-side avoids paying egress cost
  *    on the inevitable enthusiastic user who tries to send 5 MB of stdout.
- *  - retries are bounded by `Configuration::retries`, and never exceed two
- *    (three attempts in all). A 503, another 5xx answer and a transport error
+ *  - retries are bounded by `Configuration::retries` (two by default, three
+ *    attempts in all). A 503, another 5xx answer and a transport error
  *    are retried; a 4xx never is. A 503 `Retry-After` is honoured, capped at
  *    five seconds a wait, and all waits together stay inside the configured
  *    timeout. A retry repeats the same report, so it is safe; a ping whose
@@ -44,8 +44,6 @@ final class CronMonitorClient
     private const BODY_CAP_BYTES = 10000;
 
     private const USER_AGENT = 'cron-monitor-php-sdk/1.8';
-
-    private const MAX_RETRIES = 2;
 
     private const MAX_WAIT_SECONDS = 5.0;
 
@@ -190,7 +188,7 @@ final class CronMonitorClient
             $request = $request->withHeader('Authorization', 'Bearer '.$this->configuration->apiKey);
         }
 
-        $maxAttempts = min($this->configuration->retries, self::MAX_RETRIES) + 1;
+        $maxAttempts = $this->configuration->retries + 1;
         $lastError = null;
         $lastStatus = null;
         $waited = 0.0;

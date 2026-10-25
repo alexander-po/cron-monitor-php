@@ -633,7 +633,7 @@ zone, set the monitor's timezone on the dashboard after creating it.
 |----------------------------|--------------------------|-------|
 | `endpoint`                 | `https://cronheart.com`  | Self-hosted: point at your install. |
 | `timeout_seconds`          | `5.0`                    | Per-request, low by design. |
-| `retries`                  | `2`                      | A ping answered 503 (its `Retry-After` honoured, up to 5 s a wait), another 5xx, or lost to a network error is retried; a 4xx never is. A ping makes at most three attempts, so a larger value acts as 2. A retry may record a ping once more. |
+| `retries`                  | `2`                      | A ping answered 503 (its `Retry-After` honoured, up to 5 s a wait), another 5xx, or lost to a network error is retried; a 4xx never is. The default makes three attempts. A retry may record a ping once more. |
 | `api_key`                  | `null`                   | Personal Access Token (`cmk_…`) for the management API, issued on every plan; not needed for pings. |
 | `allow_insecure_endpoint`  | `false`                  | Required for `http://` endpoints. Refused outright when `api_key` is set. |
 

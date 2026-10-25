@@ -33,8 +33,7 @@ final class Configuration
     public const DEFAULT_TIMEOUT_SECONDS = 5.0;
 
     /**
-     * Per-ping retry budget; a ping makes at most three attempts whatever
-     * this is set to. A retry repeats the same report, so it is safe,
+     * Per-ping retry budget; the default makes three attempts. A retry repeats the same report, so it is safe,
      * though a ping whose response was lost or came back as a server error
      * may be recorded once more per retry; we default to a small budget
      * because the scheduler context typically has its own timeout (e.g. a
