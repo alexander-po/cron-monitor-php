@@ -270,6 +270,30 @@ final class MonitorReconcilerTest extends TestCase
         self::assertSame(ReconcileOutcome::Created, $applied[2]->outcome);
     }
 
+    public function test_dry_run_and_apply_agree_on_an_invalid_channel_id(): void
+    {
+        $jobs = [new ReconcilableJob('App\\Cron\\Ok', '0 * * * *')];
+
+        $dry = $this->reconciler(new RecordingHttpClient([self::listPage([])]))->reconcile($jobs, apply: false, channelId: 'abc');
+        $applied = $this->reconciler(new RecordingHttpClient([self::listPage([])]))->reconcile($jobs, apply: true, channelId: 'abc');
+
+        self::assertSame(ReconcileOutcome::Failed, $dry[0]->outcome);
+        self::assertSame($applied[0]->outcome, $dry[0]->outcome);
+        self::assertSame($applied[0]->error, $dry[0]->error);
+    }
+
+    public function test_dry_run_and_apply_agree_on_an_empty_cron_expression(): void
+    {
+        $jobs = [new ReconcilableJob('App\\Cron\\Ok', '')];
+
+        $dry = $this->reconciler(new RecordingHttpClient([self::listPage([])]))->reconcile($jobs, apply: false);
+        $applied = $this->reconciler(new RecordingHttpClient([self::listPage([])]))->reconcile($jobs, apply: true);
+
+        self::assertSame(ReconcileOutcome::Failed, $dry[0]->outcome);
+        self::assertSame($applied[0]->outcome, $dry[0]->outcome);
+        self::assertSame($applied[0]->error, $dry[0]->error);
+    }
+
     public function test_listing_failure_aborts_before_any_create(): void
     {
         $http = new RecordingHttpClient([self::json(401, ['title' => 'Unauthorized'])]);
