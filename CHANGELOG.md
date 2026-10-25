@@ -6,6 +6,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **A ping answered `503`, or lost to a server error or a network error, is retried up to three attempts.** A `503` waits the `Retry-After` it carries (whole seconds, at most 5 s a wait); another 5xx or a transport error or timeout waits a short step. The waits together stay inside the configured `timeoutSeconds`, and a `4xx` is never retried. `retries` now defaults to `2` (three attempts, was `1`) and any larger value acts as `2`. Each attempt resends the whole body. The retry stays inside the no-throw contract: the ping still returns a `PingResult` and never raises into the host job. Management API calls are unchanged.
+- **The Composer dist leaves out the repository's own files.** `.github/`, `.gitignore`, `.php-cs-fixer.dist.php`, `CLAUDE.md`, `phpstan.dist.neon`, `phpunit.dist.xml` and `tests/` are no longer in the archive; `bin/` and `config/` stay.
+
+### Tests
+
+- `cron-monitor:sync --dry-run` and `--apply` are pinned to agree on an invalid `--channel` id and on an empty cron expression.
+
 ## [1.8.1] — 2026-10-24
 
 A patch release: the `cron-monitor:sync --dry-run` report now matches `--apply` for a job the service would refuse. Nothing else changes.

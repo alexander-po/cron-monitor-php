@@ -1,2 +1,9 @@
 /skills export-ignore
 /AGENTS.md export-ignore
+/.github export-ignore
+/.gitignore export-ignore
+/.php-cs-fixer.dist.php export-ignore
+/CLAUDE.md export-ignore
+/phpstan.dist.neon export-ignore
+/phpunit.dist.xml export-ignore
+/tests export-ignore
