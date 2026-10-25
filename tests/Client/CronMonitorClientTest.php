@@ -340,6 +340,64 @@ final class CronMonitorClientTest extends TestCase
         self::assertSame([], $slept);
     }
 
+    public function test_a_huge_retry_after_is_capped_not_discarded(): void
+    {
+        $slept = [];
+        [$client] = $this->retryingClient([new Response(503, ['Retry-After' => '12345678901']), new Response(200)], $slept, timeout: 30.0);
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+        self::assertSame([5.0], $slept);
+    }
+
+    public function test_retry_after_zero_retries_without_sleeping(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(503, ['Retry-After' => '0']), new Response(200)], $slept);
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+        self::assertCount(2, $http->requests);
+        self::assertSame([], $slept);
+    }
+
+    public function test_an_informational_answer_is_not_retried(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(100)], $slept);
+
+        self::assertSame(100, $client->heartbeat(self::UUID)->statusCode);
+        self::assertCount(1, $http->requests);
+        self::assertSame([], $slept);
+    }
+
+    public function test_the_first_attempt_is_sent_when_the_body_stream_cannot_rewind(): void
+    {
+        $http = new RecordingHttpClient([new Response(200)]);
+        $factory = new HttpFactory();
+        $streams = new class implements \Psr\Http\Message\StreamFactoryInterface {
+            public function createStream(string $content = ''): \Psr\Http\Message\StreamInterface
+            {
+                return new \GuzzleHttp\Psr7\NoSeekStream(\GuzzleHttp\Psr7\Utils::streamFor($content));
+            }
+
+            public function createStreamFromFile(string $filename, string $mode = 'r'): \Psr\Http\Message\StreamInterface
+            {
+                throw new \LogicException('unused');
+            }
+
+            public function createStreamFromResource($resource): \Psr\Http\Message\StreamInterface
+            {
+                throw new \LogicException('unused');
+            }
+        };
+        $client = new CronMonitorClient(new Configuration('https://cronheart.com'), $http, $factory, $streams);
+
+        $result = $client->success(self::UUID, 'done');
+
+        self::assertTrue($result->delivered);
+        self::assertSame(1, $result->attempts);
+        self::assertSame(['done'], $http->bodies);
+    }
+
     public function test_a_4xx_is_never_retried_whatever_the_budget(): void
     {
         $slept = [];

@@ -226,6 +226,20 @@ final class MonitorApiClientTest extends TestCase
         self::assertCount(2, $http->requests);
     }
 
+    public function test_a_default_configuration_makes_three_attempts_on_a_retryable_call(): void
+    {
+        $http = new RecordingHttpClient([
+            self::jsonResponse(503, []),
+            self::jsonResponse(503, []),
+            self::jsonResponse(200, self::monitorRow()),
+        ]);
+        $factory = new HttpFactory();
+        $client = new MonitorApiClient(new Configuration('https://cronheart.com', apiKey: 'cmk_x'), $http, $factory, $factory);
+
+        self::assertSame(self::UUID, $client->getMonitor(self::UUID)->uuid);
+        self::assertCount(3, $http->requests);
+    }
+
     public function test_get_retries_on_transport_failure_within_budget(): void
     {
         $transportError = new class('boom') extends \RuntimeException implements ClientExceptionInterface {};

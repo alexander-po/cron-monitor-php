@@ -245,7 +245,7 @@ final class CronMonitorClient
     private static function retryAfterSeconds(string $header): ?float
     {
         $header = trim($header);
-        if (1 !== preg_match('/^[0-9]{1,9}$/D', $header)) {
+        if (1 !== preg_match('/^[0-9]+$/D', $header)) {
             return null;
         }
 
