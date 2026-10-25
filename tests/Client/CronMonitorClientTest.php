@@ -296,6 +296,50 @@ final class CronMonitorClientTest extends TestCase
         self::assertTrue($client->heartbeat(self::UUID)->delivered);
     }
 
+    public function test_the_default_backoff_steps_and_a_retry_after_that_is_not_whole_seconds_are_used(): void
+    {
+        foreach (['Tue, 03 Nov 2026 08:00:00 GMT', '1.5', '-1', '1, 2', ''] as $header) {
+            $slept = [];
+            [$client] = $this->retryingClient([
+                new Response(503, '' === $header ? [] : ['Retry-After' => $header]),
+                new Response(503, '' === $header ? [] : ['Retry-After' => $header]),
+                new Response(200),
+            ], $slept);
+
+            self::assertTrue($client->heartbeat(self::UUID)->delivered, $header);
+            self::assertSame([0.25, 0.5], $slept, $header);
+        }
+    }
+
+    public function test_retry_after_is_ignored_on_a_5xx_other_than_503(): void
+    {
+        $slept = [];
+        [$client] = $this->retryingClient([new Response(502, ['Retry-After' => '4']), new Response(200)], $slept);
+
+        self::assertTrue($client->heartbeat(self::UUID)->delivered);
+        self::assertSame([0.25], $slept);
+    }
+
+    public function test_one_retry_makes_two_attempts_and_one_wait(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(500), new Response(500)], $slept, retries: 1);
+
+        self::assertSame(2, $client->heartbeat(self::UUID)->attempts);
+        self::assertCount(2, $http->requests);
+        self::assertSame([0.25], $slept);
+    }
+
+    public function test_a_redirect_is_not_retried(): void
+    {
+        $slept = [];
+        [$client, $http] = $this->retryingClient([new Response(301)], $slept);
+
+        self::assertSame(301, $client->heartbeat(self::UUID)->statusCode);
+        self::assertCount(1, $http->requests);
+        self::assertSame([], $slept);
+    }
+
     public function test_a_4xx_is_never_retried_whatever_the_budget(): void
     {
         $slept = [];

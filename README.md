@@ -701,7 +701,7 @@ Claude Code loads it as a skill when the `add-cronheart` folder is copied into
 the application's `.claude/skills/`; any other agent can be pointed at the
 file. The recipe carries placeholder UUIDs and tokens only, and the test suite
 checks that every command it names is one the bundle registers. `skills/` and
-`AGENTS.md` are repository content: `.gitattributes` marks both `export-ignore`,
+`AGENTS.md` are repository content (as are the tests and the lint and CI configuration): `.gitattributes` marks them `export-ignore`,
 so a `composer require` install (which downloads the VCS host's archive of the
 tagged commit) never receives them.
 

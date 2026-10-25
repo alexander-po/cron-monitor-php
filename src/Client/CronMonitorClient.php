@@ -29,9 +29,9 @@ use Psr\Log\NullLogger;
  *    attempts in all). A 503, another 5xx answer and a transport error
  *    are retried; a 4xx never is. A 503 `Retry-After` is honoured, capped at
  *    five seconds a wait, and all waits together stay inside the configured
- *    timeout. A retry repeats the same report, so it is safe; a ping whose
- *    response was lost or came back as a server error may be recorded once
- *    more per retry.
+ *    timeout (each attempt keeps its own transport timeout on top). A retry
+ *    repeats the same report, so it is safe; a ping whose response was lost or
+ *    came back as a server error may be recorded once more per retry.
  */
 final class CronMonitorClient
 {
@@ -195,7 +195,9 @@ final class CronMonitorClient
 
         for ($attempt = 1; $attempt <= $maxAttempts; ++$attempt) {
             try {
-                $request->getBody()->rewind();
+                if ($attempt > 1 && $request->getBody()->isSeekable()) {
+                    $request->getBody()->rewind();
+                }
                 $response = $this->httpClient->sendRequest($request);
                 $status = $response->getStatusCode();
                 if ($status >= 200 && $status < 300) {
@@ -208,6 +210,11 @@ final class CronMonitorClient
                 }
                 $lastStatus = $status;
                 $lastError = \sprintf('HTTP %d', $status);
+                // A redirect or an informational answer will not change on a
+                // second try, so only a server error is worth another attempt.
+                if ($status < 500) {
+                    return PingResult::failed($status, $lastError, $attempt);
+                }
                 $retryAfter = 503 === $status ? self::retryAfterSeconds($response->getHeaderLine('Retry-After')) : null;
             } catch (\Throwable $e) {
                 $lastError = self::scrub($e->getMessage(), $monitorUuid);
@@ -248,8 +255,8 @@ final class CronMonitorClient
     /**
      * Sleeps before the next attempt and returns the seconds waited. One wait
      * is capped at five seconds, and the waits together at the configured
-     * timeout, so a retry never stretches the host job past what the caller
-     * already agreed to.
+     * timeout. Each attempt keeps its own transport timeout on top, so the longest
+     * ping is every attempt's timeout plus those waits.
      */
     private function pause(?float $retryAfter, int $attempt, float $waited): float
     {
