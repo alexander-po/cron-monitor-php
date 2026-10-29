@@ -43,7 +43,7 @@ final class CronMonitorClient
      */
     private const BODY_CAP_BYTES = 10000;
 
-    private const USER_AGENT = 'cron-monitor-php-sdk/1.9';
+    private const USER_AGENT = 'cron-monitor-php-sdk/1.10';
 
     private const MAX_WAIT_SECONDS = 5.0;
 
