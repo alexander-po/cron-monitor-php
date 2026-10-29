@@ -141,6 +141,30 @@ final class SyncCommandTest extends TestCase
         self::assertSame('GET', $http->requests[0]->getMethod());
     }
 
+    public function test_dry_run_exits_non_zero_when_a_row_failed(): void
+    {
+        $http = new RecordingHttpClient([self::listPage()]);
+        $tester = $this->tester($http, $this->scheduleWith(str_repeat('x', 121)));
+
+        $exit = $tester->execute(['--dry-run' => true]);
+
+        self::assertSame(1, $exit);
+        self::assertStringContainsString('failed', $tester->getDisplay());
+        self::assertStringContainsString('Dry run', $tester->getDisplay());
+        self::assertCount(1, $http->requests, 'a failed dry run still creates nothing');
+    }
+
+    public function test_apply_exits_non_zero_when_a_row_failed(): void
+    {
+        $http = new RecordingHttpClient([self::listPage()]);
+        $tester = $this->tester($http, $this->scheduleWith(str_repeat('x', 121)));
+
+        $exit = $tester->execute(['--apply' => true]);
+
+        self::assertSame(1, $exit);
+        self::assertCount(1, $http->requests, 'a refused name never reaches the create call');
+    }
+
     public function test_apply_creates_missing_monitor(): void
     {
         $uuid = '00000000-0000-0000-0000-000000000001';

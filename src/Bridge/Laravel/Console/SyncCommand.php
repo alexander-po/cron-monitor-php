@@ -176,14 +176,13 @@ final class SyncCommand extends Command
 
         $this->table(['Job', 'Status', 'Monitor'], $tableRows);
 
+        $failed = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Failed === $r->outcome);
+
         if (!$apply) {
             $this->info('Dry run: no monitors were created. Re-run with --apply to create the would-create rows.');
-
-            return self::SUCCESS;
         }
 
         $created = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Created === $r->outcome);
-        $failed = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Failed === $r->outcome);
 
         if ([] !== $created) {
             $this->newLine();
@@ -196,7 +195,7 @@ final class SyncCommand extends Command
         }
 
         if ([] !== $failed) {
-            $this->warn(\sprintf('%d monitor(s) could not be created — see the table above.', \count($failed)));
+            $this->warn(\sprintf('%d monitor(s) failed — see the table above.', \count($failed)));
 
             return self::FAILURE;
         }

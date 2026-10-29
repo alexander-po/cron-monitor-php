@@ -178,14 +178,13 @@ final class SyncCommand extends Command
 
         $io->table(['Job', 'Status', 'Monitor'], $rows);
 
+        $failed = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Failed === $r->outcome);
+
         if (!$apply) {
             $io->note('Dry run: no monitors were created. Re-run with --apply to create the would-create rows.');
-
-            return Command::SUCCESS;
         }
 
         $created = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Created === $r->outcome);
-        $failed = array_filter($results, static fn (ReconcileResult $r): bool => ReconcileOutcome::Failed === $r->outcome);
 
         if ([] !== $created) {
             $io->section('Wire each created monitor into config/packages/cron_monitor.yaml');
@@ -198,7 +197,7 @@ final class SyncCommand extends Command
         }
 
         if ([] !== $failed) {
-            $io->warning(\sprintf('%d monitor(s) could not be created — see the table above.', \count($failed)));
+            $io->warning(\sprintf('%d monitor(s) failed — see the table above.', \count($failed)));
 
             return Command::FAILURE;
         }

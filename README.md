@@ -620,7 +620,9 @@ rather than renaming the first — rename on the dashboard too, or delete the
 orphan. Two jobs that share a name are reported as a `conflict` and neither
 is created (give them distinct names). `--apply` / `--dry-run` need an API
 key; only cron-expressed jobs are auto-created (interval/closure jobs are
-reported skipped — create those by hand).
+reported skipped — create those by hand). A `--dry-run` that shows a `failed`
+row (a name the service would refuse) exits 1, so a CI preview step catches
+it; `would-create`, `exists`, `conflict` and `skipped` rows leave it at 0.
 
 The Laravel bridge carries each event's timezone into the created monitor.
 The Symfony Scheduler exposes no per-trigger timezone, so Symfony-synced

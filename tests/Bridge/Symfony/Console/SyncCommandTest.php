@@ -40,7 +40,7 @@ final class SyncCommandTest extends TestCase
      * a test choose a real cron expression (so the reconciler treats it as a
      * cron job) or a periodical-style description (so it is skipped).
      */
-    private function inventory(string $triggerStr = '0 * * * *'): ScheduleInventory
+    private function inventory(string $triggerStr = '0 * * * *', ?object $message = null): ScheduleInventory
     {
         $trigger = new class($triggerStr) implements TriggerInterface {
             public function __construct(private readonly string $repr)
@@ -58,7 +58,7 @@ final class SyncCommandTest extends TestCase
             }
         };
 
-        $schedule = (new Schedule())->add(RecurringMessage::trigger($trigger, new \stdClass()));
+        $schedule = (new Schedule())->add(RecurringMessage::trigger($trigger, $message ?? new \stdClass()));
 
         $provider = new class($schedule) implements ScheduleProviderInterface {
             public function __construct(private readonly Schedule $schedule)
@@ -137,6 +137,42 @@ final class SyncCommandTest extends TestCase
         self::assertStringContainsString('would-create', $tester->getDisplay());
         self::assertCount(1, $http->requests, 'dry-run lists once and creates nothing');
         self::assertSame('GET', $http->requests[0]->getMethod());
+    }
+
+    public function test_dry_run_exits_non_zero_when_a_row_failed(): void
+    {
+        $http = new RecordingHttpClient([self::listPage()]);
+        $command = new SyncCommand($this->inventory(message: self::messageWithRefusedName()), $this->apiClient($http), new Configuration('https://cronheart.com', apiKey: 'cmk_test'));
+
+        $tester = new CommandTester($command);
+        $exit = $tester->execute(['--dry-run' => true]);
+
+        self::assertSame(1, $exit);
+        self::assertStringContainsString('failed', $tester->getDisplay());
+        self::assertStringContainsString('Dry run', $tester->getDisplay());
+        self::assertCount(1, $http->requests, 'a failed dry run still creates nothing');
+    }
+
+    public function test_apply_exits_non_zero_when_a_row_failed(): void
+    {
+        $http = new RecordingHttpClient([self::listPage()]);
+        $command = new SyncCommand($this->inventory(message: self::messageWithRefusedName()), $this->apiClient($http), new Configuration('https://cronheart.com', apiKey: 'cmk_test'));
+
+        $tester = new CommandTester($command);
+        $exit = $tester->execute(['--apply' => true]);
+
+        self::assertSame(1, $exit);
+        self::assertCount(1, $http->requests, 'a refused name never reaches the create call');
+    }
+
+    private static function messageWithRefusedName(): object
+    {
+        $class = 'CronMonitorTestRefusedName'.str_repeat('X', 100);
+        if (!class_exists($class, false)) {
+            eval('final class '.$class.' {}');
+        }
+
+        return new $class();
     }
 
     public function test_apply_creates_missing_monitor_and_prints_uuid(): void
