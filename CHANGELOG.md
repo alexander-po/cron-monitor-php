@@ -6,6 +6,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-10-29
+
+A minor release: `cron-monitor:sync --dry-run` now fails the run when a row is `failed`, so a CI preview step catches a name the service would refuse.
+
 ### Changed
 
 - **`cron-monitor:sync --dry-run` now exits `1` when any row is `failed`, as `--apply` already did.** A `failed` row is a job the service would refuse, such as a name over 120 characters. A CI step that runs `--dry-run` and relied on exit `0` now fails on such a row, which is the point of the preview. Every other dry-run outcome (`would-create`, `exists`, `conflict`, `skipped`) still exits `0`; the Symfony and Laravel commands behave alike.
