@@ -6,6 +6,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`cron-monitor:sync --dry-run` now exits `1` when any row is `failed`, as `--apply` already did.** A `failed` row is a job the service would refuse, such as a name over 120 characters. A CI step that runs `--dry-run` and relied on exit `0` now fails on such a row, which is the point of the preview. Every other dry-run outcome (`would-create`, `exists`, `conflict`, `skipped`) still exits `0`; the Symfony and Laravel commands behave alike.
+
 ## [1.9.0] — 2026-10-25
 
 A minor release: a ping the service answered with `503`, or that hit a server error or a network error, is now retried, so a ping lost to a momentary service-side failure is no longer dropped. The default `retries` goes from `1` to `2`, which also gives the management client one more attempt on its retryable calls. The Composer dist no longer carries the repository's own files.
