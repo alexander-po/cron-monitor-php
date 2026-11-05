@@ -6,6 +6,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-11-05
+
+A minor release: a monitor reports whether it sends reminder alerts and which incident it has open, and a reminder alert has its own kind.
+
 ### Added
 
 - **Incident reminders.** `Monitor::$incidentReminders` reads the setting, and `CreateMonitorRequest` and `UpdateMonitorRequest` take `incidentReminders`; an update that leaves it out does not send it.
