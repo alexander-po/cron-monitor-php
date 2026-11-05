@@ -26,6 +26,13 @@ final class AlertTest extends TestCase
         self::assertSame(['channel_ids' => [3, 4]], $alert->dispatchedTo);
     }
 
+    public function test_a_reminder_alert_reads_as_the_reminder_case(): void
+    {
+        $alert = Alert::fromArray(['id' => '9', 'kind' => 'reminder', 'created_at' => '2026-01-02T03:00:00+00:00', 'dispatched_to' => null]);
+
+        self::assertSame(AlertKind::Reminder, $alert->kind);
+    }
+
     public function test_alert_dispatched_to_is_nullable(): void
     {
         $alert = Alert::fromArray(['id' => '8', 'kind' => 'recovered', 'created_at' => '2026-06-10T05:00:00+00:00', 'dispatched_to' => null]);

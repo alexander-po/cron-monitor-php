@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CronMonitor\Tests\Api\Dto;
 
+use CronMonitor\Api\Dto\AlertKind;
 use CronMonitor\Api\Dto\Monitor;
 use CronMonitor\Api\Dto\MonitorChannel;
 use CronMonitor\Api\Dto\MonitorStatus;
@@ -235,6 +236,54 @@ final class MonitorTest extends TestCase
         // half-built channel with empty kind/label.
         $this->expectException(\UnexpectedValueException::class);
         Monitor::fromArray(self::payload(['channels' => ['3']]));
+    }
+
+    public function test_incident_reminders_hydrate_and_default_to_off_when_absent(): void
+    {
+        self::assertTrue(Monitor::fromArray(self::payload(['incident_reminders' => true]))->incidentReminders);
+        self::assertFalse(Monitor::fromArray(self::payload(['incident_reminders' => false]))->incidentReminders);
+        self::assertFalse(Monitor::fromArray(self::payload())->incidentReminders);
+    }
+
+    public function test_incident_reminders_of_the_wrong_type_fail_the_read(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        Monitor::fromArray(self::payload(['incident_reminders' => 'yes']));
+    }
+
+    public function test_incident_reminders_null_fails_the_read(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        Monitor::fromArray(self::payload(['incident_reminders' => null]));
+    }
+
+    public function test_open_incident_hydrates_when_present(): void
+    {
+        $monitor = Monitor::fromArray(self::payload(['open_incident' => ['kind' => 'fail', 'since' => '2026-01-02T03:00:00+00:00']]));
+
+        self::assertNotNull($monitor->openIncident);
+        self::assertSame(AlertKind::Fail, $monitor->openIncident->kind);
+        self::assertSame('2026-01-02T03:00:00+00:00', $monitor->openIncident->since?->format('c'));
+    }
+
+    public function test_open_incident_tolerates_an_unknown_kind_and_a_null_since(): void
+    {
+        $monitor = Monitor::fromArray(self::payload(['open_incident' => ['kind' => 'stalled', 'since' => null]]));
+
+        self::assertSame('stalled', $monitor->openIncident?->kind);
+        self::assertNull($monitor->openIncident->since);
+    }
+
+    public function test_open_incident_is_null_when_absent_or_null(): void
+    {
+        self::assertNull(Monitor::fromArray(self::payload())->openIncident);
+        self::assertNull(Monitor::fromArray(self::payload(['open_incident' => null]))->openIncident);
+    }
+
+    public function test_open_incident_of_the_wrong_type_fails_the_read(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        Monitor::fromArray(self::payload(['open_incident' => 'fail']));
     }
 
     public function test_a_malformed_monitor_keeps_its_uuid_out_of_trace_arguments(): void

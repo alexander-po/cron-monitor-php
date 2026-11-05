@@ -529,6 +529,8 @@ narrow it down, and `Alert::$dispatchedTo` on a past alert is the only
 per-channel evidence of an actual send. `MonitorChannel` is a slim view
 (`id`, `kind`, `label`); fetch the channel itself for `verified` and `config`.
 
+**Incident reminders and the open incident.** Pass `incidentReminders: true` to `CreateMonitorRequest` or `UpdateMonitorRequest` to get reminder alerts while an incident stays open (the limits are in the API reference); leaving it out of an update keeps the current value. `Monitor::$incidentReminders` reads it, `Monitor::$openIncident` is the open incident (`kind`, `since`) or `null`, and a reminder shows in the alert history as `AlertKind::Reminder`.
+
 **Channel-test outcomes (1.2.0).** A test actually delivers. When the
 request reaches the backend cleanly but the destination rejects or fails
 the delivery, `testChannel()` throws `ChannelDeliveryException` carrying

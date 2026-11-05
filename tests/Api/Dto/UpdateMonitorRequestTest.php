@@ -24,6 +24,20 @@ final class UpdateMonitorRequestTest extends TestCase
         self::assertSame(['schedule_kind' => 'interval', 'schedule_expr' => '300', 'channel_ids' => ['3', '4']], $req->toArray());
     }
 
+    public function test_incident_reminders_are_sent_only_when_provided(): void
+    {
+        self::assertSame(['name' => 'Renamed'], (new UpdateMonitorRequest(name: 'Renamed'))->toArray());
+        self::assertSame(['incident_reminders' => true], (new UpdateMonitorRequest(incidentReminders: true))->toArray());
+    }
+
+    public function test_incident_reminders_false_is_a_real_patch(): void
+    {
+        $req = new UpdateMonitorRequest(incidentReminders: false);
+
+        self::assertFalse($req->isEmpty());
+        self::assertSame(['incident_reminders' => false], $req->toArray());
+    }
+
     public function test_is_empty_when_no_fields_are_set(): void
     {
         self::assertTrue((new UpdateMonitorRequest())->isEmpty());
