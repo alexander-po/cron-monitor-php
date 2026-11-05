@@ -32,6 +32,7 @@ final class CreateMonitorRequest
         public readonly string $tz = 'UTC',
         public readonly int $graceSeconds = 60,
         public readonly array $channelIds = [],
+        public readonly bool $incidentReminders = false,
     ) {
         DisplayName::assertMonitorName($name, 'Monitor name must be a non-empty string.');
         if ('' === trim($scheduleExpr)) {
@@ -60,7 +61,7 @@ final class CreateMonitorRequest
     }
 
     /**
-     * @return array{name: string, schedule_kind: string, schedule_expr: string, tz: string, grace_seconds: int, channel_ids: list<string>}
+     * @return array{name: string, schedule_kind: string, schedule_expr: string, tz: string, grace_seconds: int, channel_ids: list<string>, incident_reminders: bool}
      */
     public function toArray(): array
     {
@@ -71,6 +72,7 @@ final class CreateMonitorRequest
             'tz' => $this->tz,
             'grace_seconds' => $this->graceSeconds,
             'channel_ids' => array_values(array_map(static fn (int|string $id): string => (string) $id, $this->channelIds)),
+            'incident_reminders' => $this->incidentReminders,
         ];
     }
 }

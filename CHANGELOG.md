@@ -6,6 +6,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Incident reminders.** `Monitor::$incidentReminders` reads the setting, and `CreateMonitorRequest` and `UpdateMonitorRequest` take `incidentReminders`; an update that leaves it out does not send it.
+- **`Monitor::$openIncident`**, the incident the monitor has open (`kind`, `since`), or `null`; absent on an older service reads as `null`.
+- **`AlertKind::Reminder`** for the new `reminder` alert kind.
+
 ## [1.10.0] — 2026-10-29
 
 A minor release: `cron-monitor:sync --dry-run` now fails the run when a row is `failed`, so a CI preview step catches a name the service would refuse.

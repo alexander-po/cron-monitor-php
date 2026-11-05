@@ -32,6 +32,7 @@ final class UpdateMonitorRequest
         public readonly ?string $tz = null,
         public readonly ?int $graceSeconds = null,
         public readonly ?array $channelIds = null,
+        public readonly ?bool $incidentReminders = null,
     ) {
         if (null !== $name) {
             DisplayName::assertMonitorName($name, 'Monitor name, when provided, must be a non-empty string.');
@@ -85,6 +86,9 @@ final class UpdateMonitorRequest
         }
         if (null !== $this->channelIds) {
             $body['channel_ids'] = array_values(array_map(static fn (int|string $id): string => (string) $id, $this->channelIds));
+        }
+        if (null !== $this->incidentReminders) {
+            $body['incident_reminders'] = $this->incidentReminders;
         }
 
         return $body;

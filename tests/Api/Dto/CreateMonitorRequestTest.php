@@ -19,6 +19,7 @@ final class CreateMonitorRequestTest extends TestCase
             tz: 'Europe/Warsaw',
             graceSeconds: 120,
             channelIds: ['3', '7'],
+            incidentReminders: true,
         );
 
         self::assertSame([
@@ -28,7 +29,17 @@ final class CreateMonitorRequestTest extends TestCase
             'tz' => 'Europe/Warsaw',
             'grace_seconds' => 120,
             'channel_ids' => ['3', '7'],
+            'incident_reminders' => true,
         ], $request->toArray());
+    }
+
+    public function test_incident_reminders_default_to_off_and_can_be_enabled(): void
+    {
+        $off = new CreateMonitorRequest('Nightly', ScheduleKind::Cron, '0 2 * * *');
+        $on = new CreateMonitorRequest('Nightly', ScheduleKind::Cron, '0 2 * * *', incidentReminders: true);
+
+        self::assertFalse($off->toArray()['incident_reminders']);
+        self::assertTrue($on->toArray()['incident_reminders']);
     }
 
     public function test_int_channel_ids_are_accepted_and_normalised_to_strings(): void

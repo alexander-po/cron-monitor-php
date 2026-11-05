@@ -14,4 +14,5 @@ enum AlertKind: string
     case Late = 'late';
     case Fail = 'fail';
     case Recovered = 'recovered';
+    case Reminder = 'reminder';
 }

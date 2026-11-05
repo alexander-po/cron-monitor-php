@@ -62,6 +62,8 @@ final class Monitor
         public readonly string $badgeUrl,
         public readonly ?\DateTimeImmutable $snoozedUntil = null,
         public readonly array $channels = [],
+        public readonly bool $incidentReminders = false,
+        public readonly ?OpenIncident $openIncident = null,
     ) {
     }
 
@@ -87,7 +89,36 @@ final class Monitor
             Hydrator::string($data, 'badge_url'),
             Hydrator::nullableDateTime($data, 'snoozed_until'),
             self::channelsFrom($data),
+            self::incidentRemindersFrom($data),
+            self::openIncidentFrom($data),
         );
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private static function incidentRemindersFrom(#[\SensitiveParameter] array $data): bool
+    {
+        return \array_key_exists('incident_reminders', $data) ? Hydrator::bool($data, 'incident_reminders') : false;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @throws \UnexpectedValueException when "open_incident" is neither null nor an object
+     */
+    private static function openIncidentFrom(#[\SensitiveParameter] array $data): ?OpenIncident
+    {
+        $row = $data['open_incident'] ?? null;
+        if (null === $row) {
+            return null;
+        }
+        if (!\is_array($row)) {
+            throw new \UnexpectedValueException('Monitor "open_incident" must be a JSON object or null.');
+        }
+        /** @var array<string, mixed> $row */
+
+        return OpenIncident::fromArray($row);
     }
 
     /**
